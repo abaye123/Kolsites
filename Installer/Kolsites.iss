@@ -13,7 +13,7 @@
 #define AppExeName "Kolsites.exe"
 
 ; נתיב הפלט של dotnet publish
-#define SourceFolder "..\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64"
+#define SourceFolder "..\bin\x64\Release\net8.0-windows10.0.19041.0"
 
 ; כתובת ה-Windows App Runtime (לצורך הוראת התקנה אם חסר)
 #define WinAppRuntimeUrl "https://aka.ms/windowsappsdk/1.7/latest/windowsappruntimeinstall-x64.exe"
