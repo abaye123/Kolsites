@@ -10,11 +10,11 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- Top toolbar -->
             <RowDefinition Height="Auto"/>  <!-- Site buttons strip -->
-            <RowDefinition Height="*"/>     <!-- WebView2 -->
-            <RowDefinition Height="Auto"/>  <!-- Keyboard -->
+            <RowDefinition Height="*"/>     <!-- WebView -->
+            <RowDefinition Height="Auto"/>  <!-- Bottom: keyboard toggle OR keyboard -->
         </Grid.RowDefinitions>
 
-        <!-- Top toolbar - לוגו, מצב, רענון, סגירה -->
+        <!-- Top toolbar -->
         <Border Grid.Row="0"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -37,54 +37,143 @@
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                VerticalAlignment="Center"
                                Margin="12,0,0,0"/>
+
+                    <!-- אייקון התראה לאין-אינטרנט (מוצג רק כשאין חיבור והמסך המלא מושבת) -->
+                    <Border x:Name="NoInternetBadge"
+                            Visibility="Collapsed"
+                            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                            BorderBrush="{ThemeResource SystemFillColorCautionBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            Padding="8,3"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center"
+                            ToolTipService.ToolTip="אין חיבור לאינטרנט - הגלישה עשויה להיכשל">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE871;" FontSize="13"
+                                      Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                            <TextBlock Text="אין אינטרנט"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                       FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Button x:Name="HomeButton" Click="HomeButton_Click"
+                            Height="64" Padding="18,0"
                             ToolTipService.ToolTip="חזור לדף הראשי">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE10F;" FontSize="14"/>
-                            <TextBlock Text="ראשי"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE10F;" FontSize="22"/>
+                            <TextBlock Text="ראשי" FontSize="18" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="RefreshButton" Click="RefreshButton_Click"
+                            Height="64" Padding="18,0"
                             ToolTipService.ToolTip="רענן את הדף">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE72C;" FontSize="14"/>
-                            <TextBlock Text="רענן"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE72C;" FontSize="22"/>
+                            <TextBlock Text="רענן" FontSize="18" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="KeyboardButton" Click="KeyboardButton_Click"
-                            ToolTipService.ToolTip="הצג/הסתר מקלדת">
-                        <FontIcon Glyph="&#xE765;" FontSize="14"/>
+                    <Button x:Name="AboutButton" Click="AboutButton_Click"
+                            Height="64" Width="64" Padding="0"
+                            ToolTipService.ToolTip="אודות">
+                        <FontIcon Glyph="&#xE946;" FontSize="24"/>
                     </Button>
                     <Button x:Name="CloseButton" Click="CloseButton_Click"
                             Style="{ThemeResource AccentButtonStyle}"
+                            Height="64" Padding="18,0"
                             ToolTipService.ToolTip="סגור וחזור לכפתור">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE8BB;" FontSize="14"/>
-                            <TextBlock Text="סגור"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8BB;" FontSize="22"/>
+                            <TextBlock Text="סגור" FontSize="18" FontWeight="SemiBold"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Site buttons strip -->
-        <ScrollViewer Grid.Row="1"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Disabled"
-                      Padding="12,12">
-            <ItemsControl x:Name="SiteButtonsHost">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center"/>
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
-        </ScrollViewer>
+        <!-- Site buttons strip - עם אינדיקטורי גלילה ברורים בקצוות -->
+        <Grid Grid.Row="1">
+            <ScrollViewer x:Name="SiteButtonsScroll"
+                          HorizontalScrollMode="Enabled"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled"
+                          Padding="60,12"
+                          ViewChanged="SiteButtonsScroll_ViewChanged"
+                          SizeChanged="SiteButtonsScroll_SizeChanged">
+                <ItemsControl x:Name="SiteButtonsHost">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
 
-        <!-- WebView2 + welcome panel -->
+            <!-- מסכת fade ימנית + כפתור חץ שמאלה (גלילה לתחילת הרצועה - בעברית RTL זה ימינה ויזואלית) -->
+            <!-- ב-RTL, "תחילת" הרצועה = הצד הימני; "הקצה" = שמאל. הכפתורים מותאמים בהתאם. -->
+            <Border x:Name="ScrollLeftIndicator"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Stretch"
+                    Width="56"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="1,0.5" EndPoint="0,0.5">
+                        <GradientStop Offset="0" Color="Transparent"/>
+                        <GradientStop Offset="1" Color="{ThemeResource SolidBackgroundFillColorBaseAlt}"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <Border x:Name="ScrollRightIndicator"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Stretch"
+                    Width="56"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                        <GradientStop Offset="0" Color="Transparent"/>
+                        <GradientStop Offset="1" Color="{ThemeResource SolidBackgroundFillColorBaseAlt}"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <!-- כפתורי חיצים (פעילים) - מוצגים רק כאשר יש לאן לגלול בכיוון זה -->
+            <Button x:Name="ScrollLeftButton"
+                    Click="ScrollLeftButton_Click"
+                    Style="{ThemeResource AccentButtonStyle}"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Margin="6,0,0,0"
+                    Width="44" Height="44"
+                    CornerRadius="22"
+                    Padding="0"
+                    Visibility="Collapsed"
+                    ToolTipService.ToolTip="גלול לתחילת הרצועה">
+                <FontIcon Glyph="&#xE76C;" FontSize="18"/>
+            </Button>
+
+            <Button x:Name="ScrollRightButton"
+                    Click="ScrollRightButton_Click"
+                    Style="{ThemeResource AccentButtonStyle}"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Margin="0,0,6,0"
+                    Width="44" Height="44"
+                    CornerRadius="22"
+                    Padding="0"
+                    Visibility="Collapsed"
+                    ToolTipService.ToolTip="גלול לסוף הרצועה">
+                <FontIcon Glyph="&#xE76B;" FontSize="18"/>
+            </Button>
+        </Grid>
+
+        <!-- WebView + welcome panel -->
         <Grid Grid.Row="2">
             <webview2:WebView2 x:Name="WebView"
                                Visibility="Collapsed"
@@ -98,8 +187,8 @@
                     VerticalAlignment="Stretch">
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Spacing="16"
-                            MaxWidth="600">
+                            Spacing="20"
+                            MaxWidth="640">
                     <Image Source="Assets/AppIcon.png" Width="96" Height="96" HorizontalAlignment="Center"/>
                     <TextBlock Text="ברוכים הבאים"
                                Style="{ThemeResource TitleLargeTextBlockStyle}"
@@ -110,6 +199,27 @@
                                HorizontalAlignment="Center"
                                TextWrapping="Wrap"
                                TextAlignment="Center"/>
+
+                    <!-- ההקדשה מוטמעת בולטת -->
+                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource AccentFillColorSecondaryBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="22,14"
+                            Margin="0,12,0,0"
+                            HorizontalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="14"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path Width="26" Height="26"
+                                  Stretch="Uniform"
+                                  Fill="{ThemeResource SystemFillColorCautionBrush}"
+                                  Data="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"/>
+                            <TextBlock Text="התוכנה לע&quot;נ ר' משה ב&quot;ר אברהם זצ&quot;ל"
+                                       Style="{ThemeResource SubtitleTextBlockStyle}"
+                                       VerticalAlignment="Center"
+                                       TextAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 
@@ -125,7 +235,7 @@
                            HorizontalAlignment="Center"/>
             </StackPanel>
 
-            <!-- No-internet panel -->
+            <!-- No-internet panel (מסך מלא) -->
             <Border x:Name="NoInternetPanel"
                     Visibility="Collapsed"
                     Background="{ThemeResource LayerFillColorAltBrush}">
@@ -147,7 +257,40 @@
             </Border>
         </Grid>
 
-        <!-- On-screen keyboard -->
-        <local:OnScreenKeyboard x:Name="Keyboard" Grid.Row="3" Visibility="Collapsed"/>
+        <!-- Bottom row: keyboard toggle button (גדול ובולט) או המקלדת עצמה -->
+        <Grid Grid.Row="3">
+            <!-- כפתור גדול ובולט להצגת המקלדת - מוצג רק כשהמקלדת מוסתרת -->
+            <Button x:Name="ShowKeyboardButton"
+                    Click="KeyboardButton_Click"
+                    Style="{ThemeResource AccentButtonStyle}"
+                    HorizontalAlignment="Stretch"
+                    Height="78"
+                    Margin="16,8,16,12"
+                    CornerRadius="12">
+                <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                    <FontIcon Glyph="&#xE765;" FontSize="34"/>
+                    <TextBlock Text="הצג מקלדת"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+
+            <!-- המקלדת עצמה - מוצגת כשהיא פעילה (במקום הכפתור) -->
+            <Grid x:Name="KeyboardContainer" Visibility="Collapsed">
+                <local:OnScreenKeyboard x:Name="Keyboard"/>
+                <!-- כפתור הסתרה קטן בפינה -->
+                <Button x:Name="HideKeyboardButton"
+                        Click="KeyboardButton_Click"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,4,8,0"
+                        ToolTipService.ToolTip="הסתר מקלדת"
+                        Background="Transparent"
+                        BorderThickness="0">
+                    <FontIcon Glyph="&#xE8BB;" FontSize="14"/>
+                </Button>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>

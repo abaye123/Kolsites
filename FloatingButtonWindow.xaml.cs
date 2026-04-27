@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,6 +15,7 @@ namespace Kolsites
     {
         private readonly AppSettings _settings;
         private KioskWindow? _kioskWindow;
+        private DispatcherQueueTimer? _topmostTimer;
 
         public FloatingButtonWindow(AppSettings settings)
         {
@@ -29,8 +31,24 @@ namespace Kolsites
 
             ConfigureWindow();
             ApplyButtonAppearance();
+            StartTopmostEnforcement();
 
             Activated += (_, _) => EnsureTopmost();
+            Closed += (_, _) => _topmostTimer?.Stop();
+        }
+
+        /// <summary>
+        /// Timer שמוודא שהכפתור הצף נשאר תמיד-למעלה מעל כל החלונות.
+        /// IsAlwaysOnTop של WinUI לבד לא תמיד מספיק מול תוכנות מסך מלא;
+        /// קריאה תקופתית ל-SetWindowPos עם HWND_TOPMOST מבטיחה שמירה על הקדמה.
+        /// </summary>
+        private void StartTopmostEnforcement()
+        {
+            var dispatcher = DispatcherQueue.GetForCurrentThread();
+            _topmostTimer = dispatcher.CreateTimer();
+            _topmostTimer.Interval = TimeSpan.FromMilliseconds(1000);
+            _topmostTimer.Tick += (_, _) => EnsureTopmost();
+            _topmostTimer.Start();
         }
 
         private void ConfigureWindow()
@@ -41,8 +59,9 @@ namespace Kolsites
 
             PositionWindow();
 
-            // רקע שקוף לחלון - מתבצע ע"י WS_EX_LAYERED + צבע מפתח
-            MakeWindowTransparent();
+            // החלון מסומן כ-WS_EX_TOOLWINDOW כדי שלא יופיע ב-Alt+Tab.
+            // רקע החלון לבן אטום (אין יותר מנגנון color-key) - הכפתור מלבני עם פינות מעוגלות.
+            ApplyToolWindowExStyle();
         }
 
         private void ApplyButtonAppearance()
@@ -92,31 +111,46 @@ namespace Kolsites
 
         private void EnsureTopmost()
         {
-            var appWindow = WindowHelper.GetAppWindow(this);
-            if (appWindow?.Presenter is OverlappedPresenter op)
+            try
             {
-                op.IsAlwaysOnTop = true;
+                var appWindow = WindowHelper.GetAppWindow(this);
+                if (appWindow?.Presenter is OverlappedPresenter op)
+                {
+                    op.IsAlwaysOnTop = true;
+                }
+
+                // חשוב: SetWindowPos עם HWND_TOPMOST + SWP_NOACTIVATE
+                // זה הדרך האמינה ביותר לשמור על הכפתור מעל הכל,
+                // בלי לגנוב פוקוס מהתוכנה הפעילה (חשוב כי הכפתור לא צריך פוקוס - רק נראות).
+                var hWnd = WindowHelper.GetHwnd(this);
+                // ללא SWP_SHOWWINDOW כדי שלא נחזיר לראווה כפתור שהוסתר ידנית בעת פתיחת הקיוסק
+                SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             }
+            catch { }
         }
 
-        private void MakeWindowTransparent()
+        private static readonly IntPtr HWND_TOPMOST = new(-1);
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
+
+        private void ApplyToolWindowExStyle()
         {
-            // הפיכת רקע החלון לשקוף כדי שרק הכפתור (העגול/מעוגל) יוצג
+            // הוספת WS_EX_TOOLWINDOW כדי שהחלון לא יופיע ב-Alt+Tab או ב-taskbar.
             var hWnd = WindowHelper.GetHwnd(this);
             int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            SetWindowLong(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED | WS_EX_TOOLWINDOW);
-
-            // צבע מפתח - מגנטה (255,0,255) לא מופיע בכפתור הרגיל,
-            // ולכן ייהפך לשקוף ב-LWA_COLORKEY
-            SetLayeredWindowAttributes(hWnd, 0x00FF00FF, 255, LWA_COLORKEY | LWA_ALPHA);
-
-            // צביעת רקע ה-WinUI Grid במגנטה
-            RootGrid.Background = new SolidColorBrush(Color.FromArgb(255, 255, 0, 255));
+            SetWindowLong(hWnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
         }
 
         private void OpenButton_Click(object sender, RoutedEventArgs e)
         {
-            // הסתרת הכפתור בעת פתיחת חלון הקיוסק
+            // עצירת הטיימר והסתרת הכפתור בעת פתיחת חלון הקיוסק
+            _topmostTimer?.Stop();
             this.AppWindow?.Hide();
 
             _kioskWindow = new KioskWindow(_settings, OnKioskClosed);
@@ -131,24 +165,19 @@ namespace Kolsites
                 _kioskWindow = null;
                 this.AppWindow?.Show();
                 EnsureTopmost();
+                _topmostTimer?.Start();
             }
             catch { }
         }
 
-        // P/Invoke - שקיפות חלון
+        // P/Invoke - extended window style
         private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_LAYERED = 0x00080000;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
-        private const int LWA_COLORKEY = 0x00000001;
-        private const int LWA_ALPHA = 0x00000002;
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
         private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
         private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        [DllImport("user32.dll")]
-        private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, int dwFlags);
     }
 }

@@ -22,6 +22,18 @@ namespace Kolsites
         BottomCenter
     }
 
+    public class SiteScript
+    {
+        /// <summary>שם התיאור של הסקריפט (לניהול בהגדרות)</summary>
+        public string Name { get; set; } = "";
+
+        /// <summary>קוד JavaScript להרצה. רץ בהקשר של הדף הטעון.</summary>
+        public string Code { get; set; } = "";
+
+        /// <summary>האם להריץ את הסקריפט - מאפשר השבתה זמנית בלי למחוק</summary>
+        public bool Enabled { get; set; } = true;
+    }
+
     public class SiteButton
     {
         /// <summary>מזהה ייחודי - GUID</summary>
@@ -44,6 +56,13 @@ namespace Kolsites
 
         /// <summary>האם הכפתור מופעל ומוצג</summary>
         public bool Enabled { get; set; } = true;
+
+        /// <summary>
+        /// סקריפטים שירוצו על האתר (כמו TimerDirshu/TimerYak במקור) -
+        /// מסירים אלמנטים מסויימים, מסתירים פרסומות, וכו'.
+        /// רצים כל שנייה בזמן שהאתר טעון.
+        /// </summary>
+        public List<SiteScript> Scripts { get; set; } = new();
     }
 
     public class AppSettings
@@ -52,13 +71,13 @@ namespace Kolsites
         public AppTheme Theme { get; set; } = AppTheme.System;
 
         [JsonConverter(typeof(JsonStringEnumConverter))]
-        public FloatingButtonPosition ButtonPosition { get; set; } = FloatingButtonPosition.BottomRight;
+        public FloatingButtonPosition ButtonPosition { get; set; } = FloatingButtonPosition.TopLeft;
 
         /// <summary>גודל הכפתור הצף בפיקסלים (לוגיים)</summary>
         public int ButtonSize { get; set; } = 80;
 
         /// <summary>מרווח מקצה המסך בפיקסלים</summary>
-        public int ButtonMargin { get; set; } = 20;
+        public int ButtonMargin { get; set; } = 5;
 
         /// <summary>תווית הכפתור הצף (אם ריק - מציג אייקון בלבד)</summary>
         public string ButtonLabel { get; set; } = "";
@@ -77,6 +96,12 @@ namespace Kolsites
 
         /// <summary>זמן ניקוי cache אוטומטי בעת סגירת הדפדפן (true תמיד)</summary>
         public bool ClearCacheOnClose { get; set; } = true;
+
+        /// <summary>
+        /// האם להציג מסך מלא של "אין אינטרנט" כאשר זוהה ניתוק.
+        /// במקרה של ניתוקי רשת קלים זה יכול להפריע - אז עדיף להציג רק אייקון התראה בסרגל.
+        /// </summary>
+        public bool ShowNoInternetOverlay { get; set; } = false;
     }
 
     public static class SettingsManager
@@ -113,6 +138,9 @@ namespace Kolsites
                 foreach (var b in settings.Buttons.Where(b => string.IsNullOrEmpty(b.Id)))
                     b.Id = Guid.NewGuid().ToString();
 
+                // מיגרציה: אם כפתור עם URL זהה לברירת מחדל לא מכיל סקריפטים, נשלים מברירת המחדל
+                MergeDefaultScriptsIfMissing(settings);
+
                 return settings;
             }
             catch
@@ -143,21 +171,181 @@ namespace Kolsites
             }
         }
 
-        /// <summary>הגדרות ברירת מחדל - כולל הכפתורים מהתוכנה הישנה</summary>
+        /// <summary>
+        /// מיגרציה לתאימות אחורנית: אם כפתור קיים עם URL שתואם לברירת מחדל אך ללא סקריפטים
+        /// או ללא IconPath - משלים מברירת המחדל. לא משנה ערכים מותאמים שכבר קיימים.
+        /// </summary>
+        private static void MergeDefaultScriptsIfMissing(AppSettings settings)
+        {
+            try
+            {
+                var defaults = CreateDefaults();
+                foreach (var btn in settings.Buttons)
+                {
+                    var match = defaults.Buttons.FirstOrDefault(d =>
+                        !string.IsNullOrEmpty(d.Url) &&
+                        string.Equals(d.Url, btn.Url, StringComparison.OrdinalIgnoreCase));
+
+                    if (match == null) continue;
+
+                    // השלמת סקריפטים אם חסרים
+                    if ((btn.Scripts == null || btn.Scripts.Count == 0) && match.Scripts.Count > 0)
+                    {
+                        btn.Scripts = match.Scripts.Select(s => new SiteScript
+                        {
+                            Name = s.Name,
+                            Code = s.Code,
+                            Enabled = s.Enabled
+                        }).ToList();
+                    }
+
+                    // השלמת תמונה אם חסרה - בודק גם שהתמונה הנכנסת קיימת בפועל בדיסק
+                    if (string.IsNullOrWhiteSpace(btn.IconPath) &&
+                        !string.IsNullOrWhiteSpace(match.IconPath) &&
+                        File.Exists(match.IconPath))
+                    {
+                        btn.IconPath = match.IconPath;
+                    }
+                }
+            }
+            catch { /* מיגרציה לא קריטית - בהצלחה או לא, נמשיך עם מה שיש */ }
+        }
+
+        /// <summary>נתיב מלא לתמונת ברירת מחדל בתיקיית Assets\DefaultButtons</summary>
+        public static string DefaultIconPath(string fileName) =>
+            Path.Combine(AppContext.BaseDirectory, "Assets", "DefaultButtons", fileName);
+
+        /// <summary>הגדרות ברירת מחדל - כולל הכפתורים מהתוכנה הישנה והסקריפטים שלהם</summary>
         public static AppSettings CreateDefaults()
         {
+            // עוזר ליצירת סקריפט שמסיר אלמנטים לפי IDs (התבנית הנפוצה ביותר במקור)
+            static SiteScript RemoveByIds(string name, params string[] ids)
+            {
+                var list = string.Join(",", ids.Select(i => $"'{i}'"));
+                return new SiteScript
+                {
+                    Name = name,
+                    Code = $"[{list}].forEach(function(id){{ var el=document.getElementById(id); if(el) el.remove(); }});",
+                    Enabled = true
+                };
+            }
+
+            // עוזר לסקריפט שמסיר .MainBt לפי attribute של onclick
+            static SiteScript RemoveMainBtByOnclick(string name, string onclickValue) =>
+                new()
+                {
+                    Name = name,
+                    Code = $"document.querySelectorAll('.MainBt').forEach(function(el){{ if(el.getAttribute('onclick')===\"{onclickValue}\") el.remove(); }});",
+                    Enabled = true
+                };
+
             return new AppSettings
             {
                 Buttons = new List<SiteButton>
                 {
-                    new() { Name = "נדרים פלוס - לידת בן",      Url = "https://www.matara.pro/nedarimplus/Forms/976.html",                                                  Label = "לידת\nבן",       BackgroundColor = "#4CAF50" },
-                    new() { Name = "דרשו",                      Url = "https://www.matara.pro/nedarimplus/Forms/Dirshu.html?Keyboard=tel&MasofId=&ClientId=&Zeout=&Version=75", Label = "דרשו",          BackgroundColor = "#2196F3" },
-                    new() { Name = "שיח התורה",                Url = "https://rishumon.net/SiachAtorah.html",                                                              Label = "שיח\nהתורה",   BackgroundColor = "#9C27B0" },
-                    new() { Name = "שיננא",                    Url = "https://www.matara.pro/nedarimplus/Forms/1953.html?Version=1",                                       Label = "שיננא",         BackgroundColor = "#FF5722" },
-                    new() { Name = "ישיבה של כיברו",           Url = "https://www.matara.pro/YeshivaHalKivro",                                                              Label = "ישיבה של\nכיברו", BackgroundColor = "#795548" },
-                    new() { Name = "רב קו אונליין",            Url = "https://ravkavonline.co.il/he/store/connect",                                                         Label = "רב קו",         BackgroundColor = "#3F51B5" },
-                    new() { Name = "רישום למערכת מתרא",        Url = "https://www.matara.pro/nedarimplus/Forms/3347.html",                                                  Label = "רישום\nראשוני", BackgroundColor = "#009688" },
-                    new() { Name = "עדכון לימוד חודשי",       Url = "https://www.matara.pro/nedarimplus/Forms/3348.html",                                                  Label = "עדכון\nחודשי",  BackgroundColor = "#607D8B" }
+                    new()
+                    {
+                        Name = "לדעת",
+                        Url = "https://www.matara.pro/nedarimplus/Forms/976.html",
+                        Label = "לדעת",
+                        BackgroundColor = "#4CAF50",
+                        IconPath = DefaultIconPath("ladat.png"),
+                        Scripts = new List<SiteScript>
+                        {
+                            RemoveByIds("הסר לוגו ופוטר", "FooterLogo", "SecurityLogo", "task1-2")
+                        }
+                    },
+                    new()
+                    {
+                        Name = "דרשו",
+                        Url = "https://www.matara.pro/nedarimplus/Forms/Dirshu.html?Keyboard=tel&MasofId=&ClientId=&Zeout=&Version=75",
+                        Label = "דרשו",
+                        BackgroundColor = "#2196F3",
+                        IconPath = DefaultIconPath("dirshu.png"),
+                        Scripts = new List<SiteScript>
+                        {
+                            RemoveByIds("הסר תפריט וכותרות", "MenuBack", "FooterLogo", "task1-2")
+                        }
+                    },
+                    new()
+                    {
+                        Name = "שיח התורה",
+                        Url = "https://rishumon.net/SiachAtorah.html",
+                        Label = "שיח התורה",
+                        BackgroundColor = "#9C27B0",
+                        IconPath = DefaultIconPath("siach_atorah.png"),
+                        Scripts = new List<SiteScript>
+                        {
+                            RemoveByIds("הסר תפריט וכותרות", "TopMenu", "TopNedarimBack", "TopMenuBg", "FooterLogo", "SignPad", "task1-2"),
+                            RemoveMainBtByOnclick("הסר כפתור פניות", "GetPniyot()")
+                        }
+                    },
+                    new()
+                    {
+                        Name = "שיננא",
+                        Url = "https://www.matara.pro/nedarimplus/Forms/1953.html",
+                        Label = "שיננא",
+                        BackgroundColor = "#FF5722",
+                        IconPath = DefaultIconPath("shinana.png"),
+                        Scripts = new List<SiteScript>
+                        {
+                            RemoveByIds("הסר אלמנטים", "Event_Bt", "SignPad", "FooterLogo", "SecurityLogo", "task1-2")
+                        }
+                    },
+                    new()
+                    {
+                        Name = "ישיבה על קברו",
+                        Url = "https://www.matara.pro/YeshivaHalKivro",
+                        Label = "ישיבה על קברו",
+                        BackgroundColor = "#795548",
+                        IconPath = DefaultIconPath("yeshiva_yakir.png"),
+                        Scripts = new List<SiteScript>
+                        {
+                            RemoveByIds("הסר פרסומות וכותרות", "AdsDiv", "ChooseDayBt", "TopMenuBack", "TopMenu", "TopNedarimBack", "SignPad", "FooterLogo", "task1-2"),
+                            RemoveMainBtByOnclick("הסר כפתור פניה", "GoTo('Pniya')")
+                        }
+                    },
+                    new()
+                    {
+                        Name = "רב קו אונליין",
+                        Url = "https://ravkavonline.co.il/he/store/connect",
+                        Label = "רב קו",
+                        BackgroundColor = "#3F51B5",
+                        Enabled = false,
+                        IconPath = DefaultIconPath("ravkav.png"),
+                        Scripts = new List<SiteScript>
+                        {
+                            new()
+                            {
+                                Name = "ניקוי ממשק רב-קו",
+                                Code = @"
+['ravkav-logo','reusableId','task1-2'].forEach(function(id){var el=document.getElementById(id);if(el)el.remove();});
+document.querySelectorAll('.top-nav__item').forEach(function(el){
+  var a = el.querySelector('a');
+  if(!a) return;
+  var h = a.getAttribute('href');
+  if(h==='/he/store/ravkav-issue-request/check' || h==='/he/store/account' || h==='/he/store/profile-loading/check') el.remove();
+  if(el.querySelector('.language-picker')) el.remove();
+});
+document.querySelectorAll('.flex.flex--align-start.flex--wrap.m--top--small').forEach(function(el){el.remove();});
+document.querySelectorAll('.bg--stable .notification').forEach(function(el){el.remove();});
+",
+                                Enabled = true
+                            }
+                        }
+                    },
+                    new()
+                    {
+                        Name = "תורה שבכתב",
+                        Url = "https://tora.irom.co.il/",
+                        Label = "תורה שבכתב",
+                        BackgroundColor = "#607D8B",
+                        IconPath = DefaultIconPath("torasebktav.png"),
+                        Scripts = new List<SiteScript>
+                        {
+                            RemoveByIds("הסר לוגו ופוטר", "FooterLogo", "SecurityLogo", "task1-2")
+                        }
+                    }
                 }
             };
         }

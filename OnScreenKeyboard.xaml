@@ -6,12 +6,19 @@
     xmlns:local="using:Kolsites">
 
     <UserControl.Resources>
+        <!-- דריסת המסגרת של כל ה-Button בתוך המקלדת לצבע כהה ובולט יותר.
+             ברירת המחדל של WinUI היא ControlElevationBorderBrush שמתמזג ב-LayerFillColorDefaultBrush. -->
+        <StaticResource x:Key="ButtonBorderBrush" ResourceKey="ControlStrongStrokeColorDefaultBrush"/>
+        <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="ControlStrongStrokeColorDefaultBrush"/>
+        <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="ControlStrongStrokeColorDefaultBrush"/>
+
         <Style x:Key="KeyButtonStyle" TargetType="Button">
             <Setter Property="MinWidth" Value="58"/>
             <Setter Property="MinHeight" Value="58"/>
             <Setter Property="FontSize" Value="22"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="3"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="CornerRadius" Value="8"/>

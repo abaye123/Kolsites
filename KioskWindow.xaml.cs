@@ -18,10 +18,14 @@ namespace Kolsites
 {
     public sealed partial class KioskWindow : Window
     {
+        private const int InactivityTimeoutSeconds = 45;
+
         private readonly AppSettings _settings;
         private readonly Action _onClosed;
         private readonly DispatcherQueueTimer _topmostTimer;
         private readonly DispatcherQueueTimer _internetTimer;
+        private readonly DispatcherQueueTimer _inactivityTimer;
+        private readonly DispatcherQueueTimer _siteScriptsTimer;
         private bool _webViewReady;
         private string? _currentUrl;
         private SiteButton? _currentButton;
@@ -54,6 +58,21 @@ namespace Kolsites
             _internetTimer.Interval = TimeSpan.FromSeconds(5);
             _internetTimer.Tick += async (_, _) => await CheckInternetAsync();
             _internetTimer.Start();
+
+            // Inactivity timer - חזרה אוטומטית לכפתור הצף לאחר 45 שניות ללא קלט מהמשתמש.
+            // משתמשים ב-GetLastInputInfo (Win32) שמחזיר את הזמן האחרון שהמערכת קיבלה קלט (עכבר/מגע/מקלדת) -
+            // עובד גם עבור אינטראקציה בתוך WebView2, מה ש-WinUI events לא יחזיקו לבד.
+            _inactivityTimer = dispatcher.CreateTimer();
+            _inactivityTimer.Interval = TimeSpan.FromSeconds(3);
+            _inactivityTimer.Tick += (_, _) => CheckInactivity();
+            _inactivityTimer.Start();
+
+            // Site-scripts timer - מריץ את הסקריפטים של האתר הנוכחי כל שנייה.
+            // זה מחקה את ה-TimerDirshu/TimerYak וכו' של התוכנה הישנה, שהסירו אלמנטים מסויימים מהדף
+            // (לוגואים, פרסומות, תפריטים) באופן רציף - כי הדף עלול לחזור ולטעון אותם דינמית.
+            _siteScriptsTimer = dispatcher.CreateTimer();
+            _siteScriptsTimer.Interval = TimeSpan.FromSeconds(1);
+            _siteScriptsTimer.Tick += async (_, _) => await RunSiteScriptsAsync();
 
             Activated += (_, _) => EnsureTopmost();
 
@@ -109,13 +128,75 @@ namespace Kolsites
             {
                 SiteButtonsHost.Items.Add(CreateSiteButtonControl(btn));
             }
+
+            // עדכון ראשוני של אינדיקטורי הגלילה - נדרש מעט עיכוב לצורך layout
+            DispatcherQueue.GetForCurrentThread().TryEnqueue(() => UpdateScrollIndicators());
+        }
+
+        private void UpdateScrollIndicators()
+        {
+            try
+            {
+                bool canScroll = SiteButtonsScroll.ScrollableWidth > 0;
+                if (!canScroll)
+                {
+                    ScrollLeftButton.Visibility = Visibility.Collapsed;
+                    ScrollRightButton.Visibility = Visibility.Collapsed;
+                    ScrollLeftIndicator.Visibility = Visibility.Collapsed;
+                    ScrollRightIndicator.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                // ב-RTL: HorizontalOffset == 0 משמעו "תחילת הרצועה" שזה הצד הימני ויזואלית.
+                // אבל WinUI ScrollViewer לא הופך offsets ב-RTL כך שאופי הגלילה זהה - 0 = הקצה הצמוד לתחילת ה-content.
+                bool atStart = SiteButtonsScroll.HorizontalOffset <= 1;
+                bool atEnd = SiteButtonsScroll.HorizontalOffset >= SiteButtonsScroll.ScrollableWidth - 1;
+
+                ScrollLeftButton.Visibility = !atEnd ? Visibility.Visible : Visibility.Collapsed;
+                ScrollLeftIndicator.Visibility = !atEnd ? Visibility.Visible : Visibility.Collapsed;
+                ScrollRightButton.Visibility = !atStart ? Visibility.Visible : Visibility.Collapsed;
+                ScrollRightIndicator.Visibility = !atStart ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch { }
+        }
+
+        private void SiteButtonsScroll_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+        {
+            UpdateScrollIndicators();
+        }
+
+        private void SiteButtonsScroll_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateScrollIndicators();
+        }
+
+        private void ScrollLeftButton_Click(object sender, RoutedEventArgs e)
+        {
+            // החץ השמאלי - גלילה לכיוון ה-end (offset גבוה יותר)
+            double newOffset = Math.Min(
+                SiteButtonsScroll.HorizontalOffset + 240,
+                SiteButtonsScroll.ScrollableWidth);
+            SiteButtonsScroll.ChangeView(newOffset, null, null);
+        }
+
+        private void ScrollRightButton_Click(object sender, RoutedEventArgs e)
+        {
+            // החץ הימני - גלילה לכיוון ה-start (offset נמוך יותר)
+            double newOffset = Math.Max(SiteButtonsScroll.HorizontalOffset - 240, 0);
+            SiteButtonsScroll.ChangeView(newOffset, null, null);
         }
 
         private FrameworkElement CreateSiteButtonControl(SiteButton btn)
         {
-            // ניסיון לפרש HEX לצבע
-            var bgBrush = TryParseColorBrush(btn.BackgroundColor)
-                ?? (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+            bool hasCustomIcon = !string.IsNullOrWhiteSpace(btn.IconPath) && System.IO.File.Exists(btn.IconPath);
+
+            // מצב לוגו: כפתור שקוף ללא מסגרת, רק התמונה גדולה ברוחב הכפתור
+            if (hasCustomIcon)
+                return CreateLogoButton(btn);
+
+            // אחרת: כפתור צבעוני עם FontIcon + תווית
+            var baseColor = TryParseColor(btn.BackgroundColor)
+                ?? ((SolidColorBrush)Application.Current.Resources["AccentFillColorDefaultBrush"]).Color;
 
             var button = new Button
             {
@@ -123,11 +204,32 @@ namespace Kolsites
                 Height = 100,
                 Padding = new Thickness(8),
                 CornerRadius = new CornerRadius(12),
-                Background = bgBrush,
+                Background = new SolidColorBrush(baseColor),
                 Foreground = new SolidColorBrush(Colors.White),
                 BorderThickness = new Thickness(0)
             };
             ToolTipService.SetToolTip(button, btn.Name);
+
+            // דריסת הצבעים של hover/pressed כדי שלא יהפכו ללבן.
+            // ב-WinUI סגנון ברירת המחדל של Button מחליף את הרקע למשאב נושא בעת hover/pressed,
+            // אז צריך לדרוס את המשאבים האלה ברמת ה-Button עצמו.
+            var hoverBrush = new SolidColorBrush(Lighten(baseColor, 0.12));
+            var pressedBrush = new SolidColorBrush(Darken(baseColor, 0.12));
+            var whiteBrush = new SolidColorBrush(Colors.White);
+
+            button.Resources["ButtonBackground"] = new SolidColorBrush(baseColor);
+            button.Resources["ButtonBackgroundPointerOver"] = hoverBrush;
+            button.Resources["ButtonBackgroundPressed"] = pressedBrush;
+            button.Resources["ButtonBackgroundDisabled"] = new SolidColorBrush(Lighten(baseColor, 0.30));
+
+            button.Resources["ButtonForeground"] = whiteBrush;
+            button.Resources["ButtonForegroundPointerOver"] = whiteBrush;
+            button.Resources["ButtonForegroundPressed"] = whiteBrush;
+            button.Resources["ButtonForegroundDisabled"] = whiteBrush;
+
+            button.Resources["ButtonBorderBrush"] = new SolidColorBrush(Colors.Transparent);
+            button.Resources["ButtonBorderBrushPointerOver"] = new SolidColorBrush(Colors.Transparent);
+            button.Resources["ButtonBorderBrushPressed"] = new SolidColorBrush(Colors.Transparent);
 
             var content = new StackPanel
             {
@@ -136,18 +238,7 @@ namespace Kolsites
                 Spacing = 6
             };
 
-            // אייקון - או מתמונה מותאמת או FontIcon ברירת מחדל
-            if (!string.IsNullOrWhiteSpace(btn.IconPath) && System.IO.File.Exists(btn.IconPath))
-            {
-                content.Children.Add(new Image
-                {
-                    Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(btn.IconPath)),
-                    Width = 40,
-                    Height = 40,
-                    HorizontalAlignment = HorizontalAlignment.Center
-                });
-            }
-            else
+            // FontIcon ברירת מחדל (במצב צבע, ללא לוגו)
             {
                 content.Children.Add(new FontIcon
                 {
@@ -177,7 +268,45 @@ namespace Kolsites
             return button;
         }
 
-        private static Brush? TryParseColorBrush(string hex)
+        private FrameworkElement CreateLogoButton(SiteButton btn)
+        {
+            var transparent = new SolidColorBrush(Colors.Transparent);
+
+            var button = new Button
+            {
+                Width = 130,
+                Height = 100,
+                Padding = new Thickness(0),
+                CornerRadius = new CornerRadius(0),
+                Background = transparent,
+                BorderThickness = new Thickness(0)
+            };
+            ToolTipService.SetToolTip(button, btn.Name);
+
+            // דריסת כל מצבי ה-Button כדי שגם hover/pressed ישארו שקופים ובלי מסגרת
+            button.Resources["ButtonBackground"] = transparent;
+            button.Resources["ButtonBackgroundPointerOver"] = new SolidColorBrush(Color.FromArgb(20, 0, 0, 0));
+            button.Resources["ButtonBackgroundPressed"] = new SolidColorBrush(Color.FromArgb(40, 0, 0, 0));
+            button.Resources["ButtonBackgroundDisabled"] = transparent;
+
+            button.Resources["ButtonBorderBrush"] = transparent;
+            button.Resources["ButtonBorderBrushPointerOver"] = transparent;
+            button.Resources["ButtonBorderBrushPressed"] = transparent;
+
+            var image = new Image
+            {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(btn.IconPath)),
+                Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            button.Content = image;
+            button.Click += async (_, _) => await NavigateAsync(btn);
+            return button;
+        }
+
+        private static Color? TryParseColor(string hex)
         {
             if (string.IsNullOrWhiteSpace(hex)) return null;
             try
@@ -188,11 +317,29 @@ namespace Kolsites
                     byte r = Convert.ToByte(s.Substring(0, 2), 16);
                     byte g = Convert.ToByte(s.Substring(2, 2), 16);
                     byte b = Convert.ToByte(s.Substring(4, 2), 16);
-                    return new SolidColorBrush(Color.FromArgb(255, r, g, b));
+                    return Color.FromArgb(255, r, g, b);
                 }
             }
             catch { }
             return null;
+        }
+
+        private static Color Lighten(Color c, double amount)
+        {
+            amount = Math.Clamp(amount, 0, 1);
+            byte r = (byte)Math.Round(c.R + (255 - c.R) * amount);
+            byte g = (byte)Math.Round(c.G + (255 - c.G) * amount);
+            byte b = (byte)Math.Round(c.B + (255 - c.B) * amount);
+            return Color.FromArgb(c.A, r, g, b);
+        }
+
+        private static Color Darken(Color c, double amount)
+        {
+            amount = Math.Clamp(amount, 0, 1);
+            byte r = (byte)Math.Round(c.R * (1 - amount));
+            byte g = (byte)Math.Round(c.G * (1 - amount));
+            byte b = (byte)Math.Round(c.B * (1 - amount));
+            return Color.FromArgb(c.A, r, g, b);
         }
 
         private async Task InitializeWebViewAsync()
@@ -262,11 +409,32 @@ namespace Kolsites
             try
             {
                 WebView.CoreWebView2.Navigate(_currentUrl);
+
+                // הפעלת טיימר הסקריפטים של האתר הזה (אם יש סקריפטים מופעלים)
+                bool hasEnabledScripts = btn.Scripts != null && btn.Scripts.Any(s => s.Enabled);
+                if (hasEnabledScripts) _siteScriptsTimer.Start();
+                else _siteScriptsTimer.Stop();
             }
             catch (Exception ex)
             {
                 StatusText.Text = $"נכשל בטעינה: {ex.Message}";
             }
+        }
+
+        private async Task RunSiteScriptsAsync()
+        {
+            if (!_webViewReady || WebView.CoreWebView2 == null) return;
+            if (_currentButton?.Scripts == null) return;
+
+            var enabled = _currentButton.Scripts.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Code)).ToList();
+            if (enabled.Count == 0) return;
+
+            // איגוד כל הסקריפטים לקריאה אחת + try/catch כדי שכישלון של אחד לא יקרוס את האחרים
+            var combined = string.Join("\n", enabled.Select(s =>
+                $"try {{ {s.Code} }} catch(e) {{ /* {s.Name} */ }}"));
+
+            try { await WebView.CoreWebView2.ExecuteScriptAsync(combined); }
+            catch { }
         }
 
         private static string AppendCacheBuster(string url)
@@ -279,7 +447,11 @@ namespace Kolsites
         private void HookKeyboard()
         {
             if (!_settings.ShowVirtualKeyboard)
+            {
+                ShowKeyboardButton.Visibility = Visibility.Collapsed;
+                KeyboardContainer.Visibility = Visibility.Collapsed;
                 return;
+            }
 
             Keyboard.SetInitialLayout(_settings.DefaultKeyboardLayout);
 
@@ -360,38 +532,78 @@ namespace Kolsites
             };
         }
 
+        private void CheckInactivity()
+        {
+            try
+            {
+                var lii = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO)) };
+                if (!GetLastInputInfo(ref lii)) return;
+
+                uint idleMs = unchecked((uint)Environment.TickCount - lii.dwTime);
+                if (idleMs >= InactivityTimeoutSeconds * 1000)
+                {
+                    // עברו 45 שניות בלי קלט - חזרה לכפתור הצף
+                    _inactivityTimer.Stop();
+                    this.Close();
+                }
+            }
+            catch { }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LASTINPUTINFO
+        {
+            public uint cbSize;
+            public uint dwTime;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
         private async Task CheckInternetAsync()
         {
+            bool online;
             try
             {
                 using var ping = new Ping();
                 var reply = await ping.SendPingAsync("8.8.8.8", 1500);
-                bool ok = reply.Status == IPStatus.Success;
-                NoInternetPanel.Visibility = ok ? Visibility.Collapsed : Visibility.Visible;
+                online = reply.Status == IPStatus.Success;
             }
             catch
             {
-                NoInternetPanel.Visibility = Visibility.Visible;
+                online = false;
+            }
+
+            // אם המשתמש השבית את המסך המלא - מציגים רק badge קטן בסרגל
+            if (_settings.ShowNoInternetOverlay)
+            {
+                NoInternetPanel.Visibility = online ? Visibility.Collapsed : Visibility.Visible;
+                NoInternetBadge.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                NoInternetPanel.Visibility = Visibility.Collapsed;
+                NoInternetBadge.Visibility = online ? Visibility.Collapsed : Visibility.Visible;
             }
         }
 
         // ===== Button handlers =====
         private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentButton != null)
-            {
-                await NavigateAsync(_currentButton);
-            }
-            else if (_webViewReady && WebView.CoreWebView2 != null)
-            {
-                WebView.CoreWebView2.Reload();
-            }
+            // אם אנחנו במסך הברוכים-הבאים אין מה לרענן.
+            // קריאה ל-Reload() על WebView ריק תפעיל NavigationStarting שמסתיר את ה-WelcomePanel
+            // ומשאיר מסך לבן.
+            if (_currentButton == null)
+                return;
+
+            await NavigateAsync(_currentButton);
         }
 
         private void HomeButton_Click(object sender, RoutedEventArgs e)
         {
             _currentButton = null;
             _currentUrl = null;
+            _siteScriptsTimer.Stop();
             WebView.Visibility = Visibility.Collapsed;
             WelcomePanel.Visibility = Visibility.Visible;
             StatusText.Text = "";
@@ -400,9 +612,128 @@ namespace Kolsites
 
         private void KeyboardButton_Click(object sender, RoutedEventArgs e)
         {
-            Keyboard.Visibility = Keyboard.Visibility == Visibility.Visible
-                ? Visibility.Collapsed
-                : Visibility.Visible;
+            // טוגל בין הכפתור הגדול בתחתית ובין המקלדת עצמה
+            bool keyboardShown = KeyboardContainer.Visibility == Visibility.Visible;
+            if (keyboardShown)
+            {
+                KeyboardContainer.Visibility = Visibility.Collapsed;
+                ShowKeyboardButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                KeyboardContainer.Visibility = Visibility.Visible;
+                ShowKeyboardButton.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private async void AboutButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ShowAboutDialogAsync();
+        }
+
+        private async System.Threading.Tasks.Task ShowAboutDialogAsync()
+        {
+            // בניית תוכן ה-About ב-code (זהה ל-About שבהגדרות, ללא לינקי גיטהאב)
+            var version = "1.0.0";
+            try
+            {
+                var v = typeof(KioskWindow).Assembly.GetName().Version;
+                if (v != null) version = $"{v.Major}.{v.Minor}.{v.Build}";
+            }
+            catch { }
+
+            var headerStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14 };
+            headerStack.Children.Add(new Image
+            {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
+                    new Uri("ms-appx:///Assets/AppIcon.png")),
+                Width = 56,
+                Height = 56,
+                VerticalAlignment = VerticalAlignment.Top
+            });
+
+            var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2 };
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "Kolsites",
+                Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"]
+            });
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = $"גרסה {version}",
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+            });
+            titleStack.Children.Add(new TextBlock
+            {
+                Text = "תוכנת קיוסק לעמדות מסך מגע ציבוריות",
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                TextWrapping = TextWrapping.Wrap
+            });
+            headerStack.Children.Add(titleStack);
+
+            var creditStack = new StackPanel { Spacing = 2 };
+            creditStack.Children.Add(new TextBlock
+            {
+                Text = "פותח על ידי abaye",
+                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"]
+            });
+
+            // Heart Path - לזהות עם הסטיילינג של הסטינג'ס
+            var heartPath = new Microsoft.UI.Xaml.Shapes.Path
+            {
+                Width = 22,
+                Height = 22,
+                Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
+                Fill = (Brush)Application.Current.Resources["SystemFillColorCautionBrush"],
+                Data = (Microsoft.UI.Xaml.Media.Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(
+                    typeof(Microsoft.UI.Xaml.Media.Geometry),
+                    "M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z")
+            };
+
+            var dedicationStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 12,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            dedicationStack.Children.Add(heartPath);
+            dedicationStack.Children.Add(new TextBlock
+            {
+                Text = "התוכנה לע\"נ ר' משה ב\"ר אברהם זצ\"ל",
+                Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"],
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center
+            });
+
+            var dedicationBorder = new Border
+            {
+                Background = (Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"],
+                BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16, 12, 16, 12),
+                Child = dedicationStack
+            };
+
+            var content = new StackPanel { Spacing = 16, Width = 460 };
+            content.Children.Add(headerStack);
+            content.Children.Add(creditStack);
+            content.Children.Add(dedicationBorder);
+
+            var dialog = new ContentDialog
+            {
+                Title = "אודות",
+                Content = content,
+                CloseButtonText = "סגור",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = RootGrid.XamlRoot,
+                FlowDirection = FlowDirection.RightToLeft
+            };
+
+            await dialog.ShowAsync();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -427,6 +758,8 @@ namespace Kolsites
             {
                 _topmostTimer?.Stop();
                 _internetTimer?.Stop();
+                _inactivityTimer?.Stop();
+                _siteScriptsTimer?.Stop();
 
                 if (_settings.ClearCacheOnClose)
                     ClearCache();

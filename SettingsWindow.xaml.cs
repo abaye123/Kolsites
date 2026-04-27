@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -48,6 +49,7 @@ namespace Kolsites
             ShowKeyboardToggle.IsOn = _settings.ShowVirtualKeyboard;
             BlockContextMenuToggle.IsOn = _settings.BlockContextMenu;
             ClearCacheOnCloseToggle.IsOn = _settings.ClearCacheOnClose;
+            ShowNoInternetOverlayToggle.IsOn = _settings.ShowNoInternetOverlay;
 
             ButtonsList.ItemsSource = _buttons;
 
@@ -191,12 +193,12 @@ namespace Kolsites
             {
                 var v = typeof(SettingsWindow).Assembly.GetName().Version;
                 AboutVersionText.Text = v != null
-                    ? $"Kolsites · גרסה {v.Major}.{v.Minor}.{v.Build}"
-                    : "Kolsites · גרסה 1.0.0";
+                    ? $"גרסה {v.Major}.{v.Minor}.{v.Build}"
+                    : "גרסה 1.0.0";
             }
             catch
             {
-                AboutVersionText.Text = "Kolsites · גרסה 1.0.0";
+                AboutVersionText.Text = "גרסה 1.0.0";
             }
 
             SettingsPathText.Text = $"קובץ הגדרות: {SettingsManager.GetSettingsPath()}";
@@ -252,6 +254,295 @@ namespace Kolsites
                     _buttons[idx] = copy;
                     ButtonsList.SelectedIndex = idx;
                 }
+            }
+        }
+
+        private async void ScriptsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (ButtonsList.SelectedItem is not SiteButton selected) return;
+            await ShowScriptsDialogAsync(selected);
+        }
+
+        private async System.Threading.Tasks.Task ShowScriptsDialogAsync(SiteButton btn)
+        {
+            // עותק עבודה - שינויים יוחלו רק בלחיצה על אישור
+            var working = btn.Scripts?.Select(s => new SiteScript
+            {
+                Name = s.Name,
+                Code = s.Code,
+                Enabled = s.Enabled
+            }).ToList() ?? new List<SiteScript>();
+
+            // WinUI 3 לא מאפשר nested ContentDialog. במקום לפתוח דיאלוג עריכה נפרד,
+            // אנחנו עושים החלפת תוכן בתוך אותו דיאלוג: מצב רשימה ↔ מצב עריכה.
+            var contentHost = new Grid { Width = 560 };
+            var dialog = new ContentDialog
+            {
+                Title = "ניהול סקריפטים",
+                Content = new ScrollViewer { Content = contentHost, MaxHeight = 600 },
+                PrimaryButtonText = "אישור",
+                CloseButtonText = "ביטול",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = RootGrid.XamlRoot,
+                FlowDirection = FlowDirection.RightToLeft
+            };
+
+            SiteScript? selected = null;
+            // מצב נוכחי: null = רשימה, אחרת = עריכת הסקריפט הזה (יכול להיות פריט חדש או קיים)
+            SiteScript? editing = null;
+            bool isNewScript = false;
+
+            void ShowList()
+            {
+                editing = null;
+                contentHost.Children.Clear();
+                contentHost.Children.Add(BuildListView());
+                dialog.PrimaryButtonText = "אישור";
+                dialog.CloseButtonText = "ביטול";
+            }
+
+            void ShowEdit(SiteScript script, bool isNew)
+            {
+                editing = script;
+                isNewScript = isNew;
+                contentHost.Children.Clear();
+                contentHost.Children.Add(BuildEditView(script));
+                // במצב עריכה אנחנו מסתירים את כפתורי האישור/ביטול הראשיים -
+                // יש לנו כפתורי שמירה/ביטול נפרדים בתוך התצוגה
+                dialog.PrimaryButtonText = "";
+                dialog.CloseButtonText = "";
+            }
+
+            FrameworkElement BuildListView()
+            {
+                var rowsPanel = new StackPanel { Spacing = 4 };
+
+                FrameworkElement BuildRow(SiteScript script)
+                {
+                    var grid = new Grid { Padding = new Thickness(6, 6, 6, 6), ColumnSpacing = 10 };
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                    var cb = new CheckBox { IsChecked = script.Enabled, VerticalAlignment = VerticalAlignment.Center };
+                    cb.Checked += (_, _) => script.Enabled = true;
+                    cb.Unchecked += (_, _) => script.Enabled = false;
+                    Grid.SetColumn(cb, 0);
+                    grid.Children.Add(cb);
+
+                    var textPanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2 };
+                    textPanel.Children.Add(new TextBlock
+                    {
+                        Text = script.Name,
+                        Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"]
+                    });
+                    textPanel.Children.Add(new TextBlock
+                    {
+                        Text = (script.Code ?? "").Replace('\n', ' ').Replace('\r', ' '),
+                        Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                        Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        MaxLines = 1
+                    });
+                    Grid.SetColumn(textPanel, 1);
+                    grid.Children.Add(textPanel);
+
+                    var container = new Border
+                    {
+                        CornerRadius = new CornerRadius(4),
+                        Padding = new Thickness(2),
+                        Background = script == selected
+                            ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentFillColorTertiaryBrush"]
+                            : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorTransparentBrush"],
+                        Child = grid,
+                        Tag = script
+                    };
+
+                    container.Tapped += (_, _) =>
+                    {
+                        selected = script;
+                        foreach (var c in rowsPanel.Children)
+                        {
+                            if (c is Border b)
+                                b.Background = b.Tag == script
+                                    ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentFillColorTertiaryBrush"]
+                                    : (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorTransparentBrush"];
+                        }
+                    };
+                    return container;
+                }
+
+                if (working.Count == 0)
+                {
+                    rowsPanel.Children.Add(new TextBlock
+                    {
+                        Text = "אין סקריפטים. לחץ 'הוסף סקריפט' כדי להוסיף.",
+                        Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                        Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
+                        Margin = new Thickness(12)
+                    });
+                }
+                else
+                {
+                    foreach (var s in working) rowsPanel.Children.Add(BuildRow(s));
+                }
+
+                var rowsBorder = new Border
+                {
+                    Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                    BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(6),
+                    Child = new ScrollViewer
+                    {
+                        MinHeight = 220,
+                        MaxHeight = 320,
+                        Content = rowsPanel,
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                    }
+                };
+
+                var addBtn = new Button { Content = "הוסף סקריפט" };
+                var editBtn = new Button { Content = "ערוך" };
+                var removeBtn = new Button { Content = "הסר" };
+
+                addBtn.Click += (_, _) =>
+                {
+                    var s = new SiteScript { Name = "סקריפט חדש", Code = "", Enabled = true };
+                    ShowEdit(s, isNew: true);
+                };
+
+                editBtn.Click += (_, _) =>
+                {
+                    if (selected == null) return;
+                    // מעבר למצב עריכה - מקבל עותק של ה-Script הקיים, רק מחילים אם המשתמש שומר
+                    var copy = new SiteScript { Name = selected.Name, Code = selected.Code, Enabled = selected.Enabled };
+                    ShowEdit(copy, isNew: false);
+                };
+
+                removeBtn.Click += (_, _) =>
+                {
+                    if (selected == null) return;
+                    working.Remove(selected);
+                    selected = null;
+                    ShowList();
+                };
+
+                var actionsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                actionsRow.Children.Add(addBtn);
+                actionsRow.Children.Add(editBtn);
+                actionsRow.Children.Add(removeBtn);
+
+                var infoBar = new InfoBar
+                {
+                    IsOpen = true,
+                    IsClosable = false,
+                    Severity = InfoBarSeverity.Informational,
+                    Title = "סקריפטים פר-אתר",
+                    Message = "סקריפטים אלו רצים כל שנייה בעת ניווט לאתר. שימושי להסרת לוגואים, פרסומות, או אלמנטים מפריעים. הקוד הוא JavaScript רגיל בהקשר של הדף."
+                };
+
+                var content = new StackPanel { Spacing = 12 };
+                content.Children.Add(infoBar);
+                content.Children.Add(new TextBlock
+                {
+                    Text = $"כפתור: {btn.Name}",
+                    Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"]
+                });
+                content.Children.Add(rowsBorder);
+                content.Children.Add(actionsRow);
+                return content;
+            }
+
+            FrameworkElement BuildEditView(SiteScript script)
+            {
+                var nameBox = new TextBox { Header = "שם", Text = script.Name, PlaceholderText = "תיאור קצר של הסקריפט" };
+                var codeBox = new TextBox
+                {
+                    Header = "קוד JavaScript",
+                    Text = script.Code,
+                    AcceptsReturn = true,
+                    TextWrapping = TextWrapping.Wrap,
+                    MinHeight = 220,
+                    MaxHeight = 320,
+                    FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                    FontSize = 13,
+                    PlaceholderText = "לדוגמה: document.getElementById('FooterLogo')?.remove();"
+                };
+                var enabledToggle = new ToggleSwitch
+                {
+                    Header = "מופעל",
+                    IsOn = script.Enabled,
+                    OnContent = "כן",
+                    OffContent = "לא"
+                };
+
+                var saveBtn = new Button
+                {
+                    Content = isNewScript ? "הוסף" : "שמור",
+                    Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+                    MinWidth = 110
+                };
+                var cancelBtn = new Button { Content = "ביטול", MinWidth = 110 };
+
+                saveBtn.Click += (_, _) =>
+                {
+                    script.Name = string.IsNullOrWhiteSpace(nameBox.Text) ? "סקריפט" : nameBox.Text.Trim();
+                    script.Code = codeBox.Text ?? "";
+                    script.Enabled = enabledToggle.IsOn;
+
+                    if (isNewScript)
+                    {
+                        working.Add(script);
+                        selected = script;
+                    }
+                    else if (selected != null)
+                    {
+                        // עדכון הסקריפט הקיים בעותק העבודה
+                        int i = working.IndexOf(selected);
+                        if (i >= 0)
+                        {
+                            working[i] = script;
+                            selected = script;
+                        }
+                    }
+                    ShowList();
+                };
+
+                cancelBtn.Click += (_, _) => ShowList();
+
+                var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+                actions.Children.Add(saveBtn);
+                actions.Children.Add(cancelBtn);
+
+                var content = new StackPanel { Spacing = 12 };
+                content.Children.Add(new TextBlock
+                {
+                    Text = isNewScript ? "סקריפט חדש" : "עריכת סקריפט",
+                    Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"]
+                });
+                content.Children.Add(nameBox);
+                content.Children.Add(codeBox);
+                content.Children.Add(enabledToggle);
+                content.Children.Add(actions);
+                return content;
+            }
+
+            // אם המשתמש לוחץ על "ביטול" של הדיאלוג בזמן עריכה - חוזרים לרשימה במקום לסגור
+            dialog.Closing += (_, args) =>
+            {
+                if (editing != null)
+                {
+                    args.Cancel = true;
+                    ShowList();
+                }
+            };
+
+            ShowList();
+
+            if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            {
+                btn.Scripts = working.ToList();
             }
         }
 
@@ -487,6 +778,7 @@ namespace Kolsites
             _settings.DefaultKeyboardLayout = GetTag(KeyboardLayoutCombo) ?? "he";
             _settings.BlockContextMenu = BlockContextMenuToggle.IsOn;
             _settings.ClearCacheOnClose = ClearCacheOnCloseToggle.IsOn;
+            _settings.ShowNoInternetOverlay = ShowNoInternetOverlayToggle.IsOn;
 
             _settings.Buttons = _buttons.ToList();
 
