@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Kolsites.FloatingButtonWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Kolsites">
+
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Button x:Name="OpenButton"
+                Click="OpenButton_Click"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                Padding="0"
+                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                CornerRadius="20"
+                BorderThickness="2"
+                BorderBrush="{ThemeResource ControlElevationBorderBrush}">
+            <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="2">
+                    <FontIcon x:Name="ButtonGlyph"
+                              Glyph="&#xE71D;"
+                              FontSize="32"
+                              Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"/>
+                    <TextBlock x:Name="ButtonText"
+                               HorizontalAlignment="Center"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               TextAlignment="Center"
+                               Visibility="Collapsed"/>
+                </StackPanel>
+            </Grid>
+        </Button>
+    </Grid>
+</Window>

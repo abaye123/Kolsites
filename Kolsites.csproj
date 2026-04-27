@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>Kolsites</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <Nullable>enable</Nullable>
+    <EnableMsixTooling>false</EnableMsixTooling>
+
+    <!-- Unpackaged WinUI 3 -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+
+    <AssemblyName>Kolsites</AssemblyName>
+    <Version>1.0.0</Version>
+
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+
+    <AssemblyTitle>Kolsites</AssemblyTitle>
+    <Product>Kolsites</Product>
+    <Description>תוכנת קיוסק - גישה מהירה לאתרי אינטרנט במסך מגע</Description>
+    <Copyright>Copyright © 2026</Copyright>
+
+    <!-- שימוש ב-Program.cs מותאם במקום ה-Main האוטומטי של WinUI -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.250606001" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <!-- Microsoft.Web.WebView2 נכלל כתלות מעבר של WindowsAppSDK 1.7 (גרסה 1.0.2903.40+).
+         ה-control Microsoft.UI.Xaml.Controls.WebView2 מסופק ע"י WinUI 3 ולא צריך רפרנס נפרד. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\AppIcon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\AppIcon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\DefaultButtons\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\PleaseWait.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

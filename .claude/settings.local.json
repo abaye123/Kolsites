@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"C:/dev/TapLingo/Assets/AppIcon.ico\" \"C:/dev/Kolsites/Assets/AppIcon.ico\")",
+      "Bash(cp \"C:/dev/TapLingo/Assets/AppIcon.png\" \"C:/dev/Kolsites/Assets/AppIcon.png\")",
+      "Bash(dotnet restore *)"
+    ]
+  }
+}
