@@ -145,9 +145,9 @@
                                                   VerticalAlignment="Center"/>
 
                                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
-                                            <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                                            <TextBlock Text="{x:Bind Name, Mode=OneTime}"
                                                        Style="{ThemeResource BodyStrongTextBlockStyle}"/>
-                                            <TextBlock Text="{x:Bind Url, Mode=OneWay}"
+                                            <TextBlock Text="{x:Bind Url, Mode=OneTime}"
                                                        Style="{ThemeResource CaptionTextBlockStyle}"
                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                        TextTrimming="CharacterEllipsis"/>
