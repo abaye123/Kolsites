@@ -23,7 +23,7 @@
 
     <AssemblyTitle>Kolsites</AssemblyTitle>
     <Product>Kolsites</Product>
-    <Description>תוכנת קיוסק - גישה מהירה לאתרי אינטרנט במסך מגע</Description>
+    <Description>תוכנת קיוסק - גישה מהירה לאתרי אינטרנט בעמדות מחשב ציבוריות</Description>
     <Copyright>Copyright © 2026</Copyright>
 
     <!-- שימוש ב-Program.cs מותאם במקום ה-Main האוטומטי של WinUI -->

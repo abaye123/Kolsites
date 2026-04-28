@@ -805,7 +805,7 @@ namespace Kolsites
             });
             titleStack.Children.Add(new TextBlock
             {
-                Text = "תוכנת קיוסק לעמדות מסך מגע ציבוריות",
+                Text = "תוכנת קיוסק לעמדות מחשב ציבוריות",
                 Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
                 Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
                 TextWrapping = TextWrapping.Wrap

@@ -300,7 +300,7 @@
                                 <TextBlock x:Name="AboutVersionText"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
-                                <TextBlock Text="תוכנת קיוסק לעמדות מסך מגע ציבוריות"
+                                <TextBlock Text="תוכנת קיוסק לעמדות מחשב ציבוריות"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextWrapping="Wrap"/>
