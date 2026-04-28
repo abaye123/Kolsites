@@ -65,6 +65,30 @@ namespace Kolsites
         public List<SiteScript> Scripts { get; set; } = new();
     }
 
+    /// <summary>
+    /// טווח זמן שבו התוכנה אמורה להיות מנוטרלת - לחיצה על הכפתור הצף תציג חלון
+    /// "התוכנה לא פעילה כרגע" במקום לפתוח את חלון הקיוסק.
+    /// טווח שחוצה חצות: EndTime &lt; StartTime (למשל 22:00-06:00).
+    /// </summary>
+    public class BlockedTimeRange
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        /// <summary>תיאור אופציונלי (לזיהוי בהגדרות)</summary>
+        public string Name { get; set; } = "";
+
+        /// <summary>ימי השבוע שעליהם הטווח חל. 0=ראשון, 1=שני, ..., 6=שבת</summary>
+        public List<int> Days { get; set; } = new();
+
+        /// <summary>שעת התחלה (TimeSpan: HH:MM)</summary>
+        public TimeSpan StartTime { get; set; } = TimeSpan.Zero;
+
+        /// <summary>שעת סיום (TimeSpan: HH:MM). אם קטנה מ-StartTime - הטווח חוצה חצות.</summary>
+        public TimeSpan EndTime { get; set; } = TimeSpan.Zero;
+
+        public bool Enabled { get; set; } = true;
+    }
+
     public class AppSettings
     {
         [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -108,6 +132,12 @@ namespace Kolsites
         /// אם ריק - הקיצור מנוטרל לחלוטין; ברירת המחדל היא "ללא סיסמה" כדי שהקיוסק לא ייפתח להגדרות בטעות.
         /// </summary>
         public string KioskSettingsPassword { get; set; } = "";
+
+        /// <summary>
+        /// טווחי זמן שבהם התוכנה אמורה להיות חסומה. בלחיצה על הכפתור הצף בזמן חסום
+        /// יוצג חלון "התוכנה לא פעילה כרגע" עם מונה דקות עד לסיום הטווח.
+        /// </summary>
+        public List<BlockedTimeRange> BlockedTimeRanges { get; set; } = new();
     }
 
     public static class SettingsManager

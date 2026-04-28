@@ -28,6 +28,8 @@ namespace Kolsites
         // נדלק כש"הסר סיסמה" נלחץ - בשמירה נכתוב מחרוזת ריקה.
         private bool _clearKioskPassword;
 
+        private readonly List<BlockedTimeRange> _blockedRanges = new();
+
         public SettingsWindow(AppSettings settings)
         {
             InitializeComponent();
@@ -60,6 +62,8 @@ namespace Kolsites
             _originalKioskPasswordHash = _settings.KioskSettingsPassword ?? "";
             _clearKioskPassword = false;
             UpdateKioskPasswordStatus();
+
+            LoadBlockedRanges();
 
             ButtonsList.ItemsSource = _buttons;
 
@@ -803,6 +807,7 @@ namespace Kolsites
                 _settings.KioskSettingsPassword = _originalKioskPasswordHash;
 
             _settings.Buttons = _buttons.ToList();
+            _settings.BlockedTimeRanges = _blockedRanges.ToList();
 
             SettingsManager.Save(_settings);
             Close();
@@ -815,6 +820,65 @@ namespace Kolsites
             _clearKioskPassword = true;
             KioskSettingsPasswordBox.Password = "";
             UpdateKioskPasswordStatus();
+        }
+
+        private void LoadBlockedRanges()
+        {
+            _blockedRanges.Clear();
+            BlockedRangesPanel.Children.Clear();
+
+            // עותק עמוק כדי שביטול ההגדרות לא ישפיע (העותק נכתב חזרה רק בשמירה)
+            foreach (var src in _settings.BlockedTimeRanges)
+            {
+                _blockedRanges.Add(new BlockedTimeRange
+                {
+                    Id = src.Id,
+                    Name = src.Name,
+                    Days = new List<int>(src.Days),
+                    StartTime = src.StartTime,
+                    EndTime = src.EndTime,
+                    Enabled = src.Enabled
+                });
+            }
+            foreach (var range in _blockedRanges)
+                AppendRangeEditor(range);
+
+            UpdateBlockedRangesEmptyState();
+        }
+
+        private void AppendRangeEditor(BlockedTimeRange range)
+        {
+            var editor = new BlockedTimeRangeEditor();
+            editor.Bind(range);
+            editor.RemoveRequested += (_, _) =>
+            {
+                _blockedRanges.Remove(range);
+                BlockedRangesPanel.Children.Remove(editor);
+                UpdateBlockedRangesEmptyState();
+            };
+            BlockedRangesPanel.Children.Add(editor);
+        }
+
+        private void UpdateBlockedRangesEmptyState()
+        {
+            NoBlockedRangesText.Visibility = _blockedRanges.Count == 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void AddBlockedRangeButton_Click(object sender, RoutedEventArgs e)
+        {
+            // ברירת מחדל סבירה: שעות לילה (22:00-06:00) על כל ימי השבוע. המשתמש יערוך לפי הצורך.
+            var range = new BlockedTimeRange
+            {
+                Days = new List<int> { 0, 1, 2, 3, 4, 5, 6 },
+                StartTime = new TimeSpan(22, 0, 0),
+                EndTime = new TimeSpan(6, 0, 0),
+                Enabled = true
+            };
+            _blockedRanges.Add(range);
+            AppendRangeEditor(range);
+            UpdateBlockedRangesEmptyState();
         }
 
         private void UpdateKioskPasswordStatus()

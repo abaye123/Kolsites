@@ -15,6 +15,7 @@ namespace Kolsites
     {
         private readonly AppSettings _settings;
         private KioskWindow? _kioskWindow;
+        private InactiveOverlayWindow? _overlayWindow;
         private DispatcherQueueTimer? _topmostTimer;
 
         public FloatingButtonWindow(AppSettings settings)
@@ -167,6 +168,15 @@ namespace Kolsites
 
         private void OpenButton_Click(object sender, RoutedEventArgs e)
         {
+            // בדיקה אם השעה הנוכחית בתוך טווח חסום שהוגדר בהגדרות -
+            // אם כן, מציגים חלון "התוכנה לא פעילה" במקום הקיוסק. הכפתור הצף נשאר גלוי.
+            var block = BlockedTimeChecker.GetActiveBlock(_settings.BlockedTimeRanges, DateTime.Now);
+            if (block != null)
+            {
+                ShowInactiveOverlay(block);
+                return;
+            }
+
             _topmostTimer?.Stop();
 
             // הצגת חיווי טעינה במקום האייקון - משוב מיידי למשתמש שהלחיצה התקבלה
@@ -189,6 +199,27 @@ namespace Kolsites
                 this.AppWindow?.Hide();
             };
             kiosk.Activate();
+        }
+
+        private void ShowInactiveOverlay(BlockedTimeChecker.BlockResult block)
+        {
+            // אם כבר פתוח חלון overlay - מציפים אותו במקום ליצור עוד אחד
+            if (_overlayWindow != null)
+            {
+                try { _overlayWindow.Activate(); } catch { }
+                return;
+            }
+
+            try
+            {
+                _overlayWindow = new InactiveOverlayWindow(block, _settings.Theme);
+                _overlayWindow.Closed += (_, _) => _overlayWindow = null;
+                _overlayWindow.Activate();
+            }
+            catch
+            {
+                _overlayWindow = null;
+            }
         }
 
         private void OnKioskClosed()

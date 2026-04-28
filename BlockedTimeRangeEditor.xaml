@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Kolsites.BlockedTimeRangeEditor"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Kolsites">
+
+    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="12,10">
+        <StackPanel Spacing="10">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox x:Name="NameBox"
+                         Grid.Column="0"
+                         PlaceholderText="תיאור (אופציונלי)"
+                         TextChanged="NameBox_TextChanged"/>
+                <ToggleSwitch x:Name="EnabledToggle"
+                              Grid.Column="1"
+                              OnContent="פעיל"
+                              OffContent="כבוי"
+                              MinWidth="0"
+                              VerticalAlignment="Center"
+                              Toggled="EnabledToggle_Toggled"/>
+                <Button x:Name="RemoveButton"
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Click="RemoveButton_Click">
+                    <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                </Button>
+            </Grid>
+
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="ימים:"
+                           Style="{ThemeResource BodyStrongTextBlockStyle}"
+                           VerticalAlignment="Center"/>
+                <StackPanel x:Name="DaysPanel"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="4"/>
+            </Grid>
+
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="התחלה"
+                               Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                    <TimePicker x:Name="StartPicker"
+                                ClockIdentifier="24HourClock"
+                                MinuteIncrement="5"
+                                SelectedTimeChanged="StartPicker_SelectedTimeChanged"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock Text="סיום"
+                               Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                    <TimePicker x:Name="EndPicker"
+                                ClockIdentifier="24HourClock"
+                                MinuteIncrement="5"
+                                SelectedTimeChanged="EndPicker_SelectedTimeChanged"/>
+                </StackPanel>
+            </Grid>
+
+            <TextBlock x:Name="HintText"
+                       Style="{ThemeResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+    </Border>
+</UserControl>

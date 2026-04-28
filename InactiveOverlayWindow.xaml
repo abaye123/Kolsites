@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Kolsites.InactiveOverlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Kolsites">
+
+    <Grid x:Name="RootGrid" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+        <Border Padding="40,32"
+                CornerRadius="14"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <StackPanel Spacing="14" HorizontalAlignment="Center" MinWidth="380">
+                <FontIcon Glyph="&#xE823;"
+                          FontSize="56"
+                          HorizontalAlignment="Center"
+                          Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                <TextBlock Text="התוכנה לא פעילה כרגע"
+                           Style="{ThemeResource TitleTextBlockStyle}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"/>
+                <TextBlock x:Name="ResumeAtText"
+                           Style="{ThemeResource SubtitleTextBlockStyle}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                <TextBlock x:Name="CountdownText"
+                           Style="{ThemeResource BodyStrongTextBlockStyle}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           FontSize="28"/>
+                <Button x:Name="CloseButton"
+                        Content="סגור"
+                        Click="CloseButton_Click"
+                        HorizontalAlignment="Center"
+                        Margin="0,8,0,0"
+                        MinWidth="120"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

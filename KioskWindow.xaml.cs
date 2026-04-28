@@ -39,7 +39,7 @@ namespace Kolsites
             _settings = settings;
             _onClosed = onClosed;
 
-            Title = "Kolsites - תצוגה עילית";
+            Title = "Kolsites - עילי";
             RootGrid.FlowDirection = FlowDirection.RightToLeft;
 
             if (RootGrid is FrameworkElement fe)
