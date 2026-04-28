@@ -55,6 +55,7 @@ namespace Kolsites
             ButtonLabelBox.Text = _settings.ButtonLabel;
 
             ShowKeyboardToggle.IsOn = _settings.ShowVirtualKeyboard;
+            AutoShowKeyboardOnFocusToggle.IsOn = _settings.AutoShowKeyboardOnFocus;
             BlockContextMenuToggle.IsOn = _settings.BlockContextMenu;
             ClearCacheOnCloseToggle.IsOn = _settings.ClearCacheOnClose;
             ShowNoInternetOverlayToggle.IsOn = _settings.ShowNoInternetOverlay;
@@ -814,6 +815,7 @@ namespace Kolsites
             _settings.ButtonLabel = ButtonLabelBox.Text?.Trim() ?? "";
 
             _settings.ShowVirtualKeyboard = ShowKeyboardToggle.IsOn;
+            _settings.AutoShowKeyboardOnFocus = AutoShowKeyboardOnFocusToggle.IsOn;
             _settings.DefaultKeyboardLayout = GetTag(KeyboardLayoutCombo) ?? "he";
             _settings.KeyboardScale = ParseKeyboardScale(GetTag(KeyboardScaleCombo));
             _settings.BlockContextMenu = BlockContextMenuToggle.IsOn;

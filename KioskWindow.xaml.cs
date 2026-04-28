@@ -411,6 +411,26 @@ namespace Kolsites
                     // עוד לפני שהדפדפן הספיק לבצע אותם.
                     await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                         NetfreeBlockerScript);
+
+                    // הזרקת מאזין focus שמודיע ל-host כשפקד קלט בדף קיבל פוקוס,
+                    // כדי שנוכל לפתוח אוטומטית את המקלדת הווירטואלית.
+                    await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                        InputFocusListenerScript);
+
+                    WebView.CoreWebView2.WebMessageReceived += (_, e) =>
+                    {
+                        try
+                        {
+                            var msg = e.TryGetWebMessageAsString();
+                            if (msg == "input_focused"
+                                && _settings.ShowVirtualKeyboard
+                                && _settings.AutoShowKeyboardOnFocus)
+                            {
+                                ShowKeyboardUi();
+                            }
+                        }
+                        catch { }
+                    };
                 }
             }
             catch (Exception ex)
@@ -423,6 +443,31 @@ namespace Kolsites
         // 1) MutationObserver שמסיר תגי script ואלמנטים של נטפרי ברגע שמתווספים ל-DOM
         //    (לפני שהדפדפן הספיק לבצע את הסקריפט).
         // 2) sweep ראשוני בסיום הטעינה כגיבוי במקרה שמשהו פספס.
+        // מאזין focus בכל דף - שולח הודעה ל-host כשמשתמש לוחץ על שדה קלט עריך,
+        // כדי שהמקלדת הווירטואלית תיפתח אוטומטית. מסנן סוגי input שאינם טקסט (button, checkbox וכו').
+        private const string InputFocusListenerScript = @"
+(function() {
+    function isEditable(el) {
+        if (!el || !el.tagName) return false;
+        if (el.tagName === 'INPUT') {
+            var t = (el.type || 'text').toLowerCase();
+            var nonText = ['button','submit','reset','checkbox','radio','file','image','hidden','range','color'];
+            return nonText.indexOf(t) === -1;
+        }
+        if (el.tagName === 'TEXTAREA') return true;
+        if (el.isContentEditable) return true;
+        return false;
+    }
+    document.addEventListener('focusin', function(e) {
+        try {
+            if (isEditable(e.target) && window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage('input_focused');
+            }
+        } catch (err) {}
+    }, true);
+})();
+";
+
         private const string NetfreeBlockerScript = @"
 (function() {
     var scriptUrls = [
@@ -751,17 +796,23 @@ namespace Kolsites
         private void KeyboardButton_Click(object sender, RoutedEventArgs e)
         {
             // טוגל בין הכפתור הגדול בתחתית ובין המקלדת עצמה
-            bool keyboardShown = KeyboardContainer.Visibility == Visibility.Visible;
-            if (keyboardShown)
-            {
-                KeyboardContainer.Visibility = Visibility.Collapsed;
-                ShowKeyboardButton.Visibility = Visibility.Visible;
-            }
+            if (KeyboardContainer.Visibility == Visibility.Visible)
+                HideKeyboardUi();
             else
-            {
-                KeyboardContainer.Visibility = Visibility.Visible;
-                ShowKeyboardButton.Visibility = Visibility.Collapsed;
-            }
+                ShowKeyboardUi();
+        }
+
+        private void ShowKeyboardUi()
+        {
+            if (!_settings.ShowVirtualKeyboard) return;
+            KeyboardContainer.Visibility = Visibility.Visible;
+            ShowKeyboardButton.Visibility = Visibility.Collapsed;
+        }
+
+        private void HideKeyboardUi()
+        {
+            KeyboardContainer.Visibility = Visibility.Collapsed;
+            ShowKeyboardButton.Visibility = Visibility.Visible;
         }
 
         private async void AboutButton_Click(object sender, RoutedEventArgs e)

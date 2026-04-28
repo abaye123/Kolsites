@@ -112,6 +112,12 @@ namespace Kolsites
         /// <summary>האם להפעיל מקלדת וירטואלית בחלון העילי</summary>
         public bool ShowVirtualKeyboard { get; set; } = true;
 
+        /// <summary>
+        /// האם לפתוח את המקלדת הווירטואלית אוטומטית כשפקד קלט בדף האינטרנט מקבל פוקוס.
+        /// תקף רק כש-ShowVirtualKeyboard = true.
+        /// </summary>
+        public bool AutoShowKeyboardOnFocus { get; set; } = true;
+
         /// <summary>מקלדת ברירת מחדל - "he" עברית, "en" אנגלית</summary>
         public string DefaultKeyboardLayout { get; set; } = "he";
 

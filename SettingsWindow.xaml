@@ -200,6 +200,9 @@
                         <ToggleSwitch x:Name="ShowKeyboardToggle"
                                       Header="הצג מקלדת וירטואלית"
                                       OnContent="כן" OffContent="לא"/>
+                        <ToggleSwitch x:Name="AutoShowKeyboardOnFocusToggle"
+                                      Header="פתח מקלדת אוטומטית כשפקד קלט מקבל פוקוס"
+                                      OnContent="כן" OffContent="לא"/>
                         <StackPanel Spacing="4">
                             <TextBlock Text="פריסת מקלדת ברירת מחדל"
                                        Style="{ThemeResource BodyStrongTextBlockStyle}"/>
