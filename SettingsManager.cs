@@ -115,6 +115,12 @@ namespace Kolsites
         /// <summary>מקלדת ברירת מחדל - "he" עברית, "en" אנגלית</summary>
         public string DefaultKeyboardLayout { get; set; } = "he";
 
+        /// <summary>
+        /// מכפיל גודל המקלדת הווירטואלית. 1.0 = רגיל. ערך גבוה יותר מגדיל את גובה
+        /// המקלדת ואת המקשים (שימושי במסך לאורך שיש בו מקום לגובה גדול יותר).
+        /// </summary>
+        public double KeyboardScale { get; set; } = 1.0;
+
         /// <summary>האם לחסום תפריט הקשר ימני בדף האינטרנט</summary>
         public bool BlockContextMenu { get; set; } = true;
 

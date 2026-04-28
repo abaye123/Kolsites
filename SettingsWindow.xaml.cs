@@ -48,6 +48,7 @@ namespace Kolsites
             SelectComboByTag(ThemeCombo, _settings.Theme.ToString());
             SelectComboByTag(PositionCombo, _settings.ButtonPosition.ToString());
             SelectComboByTag(KeyboardLayoutCombo, _settings.DefaultKeyboardLayout);
+            SelectComboByTag(KeyboardScaleCombo, KeyboardScaleToTag(_settings.KeyboardScale));
 
             ButtonSizeBox.Value = _settings.ButtonSize;
             ButtonMarginBox.Value = _settings.ButtonMargin;
@@ -200,6 +201,30 @@ namespace Kolsites
 
         private static string? GetTag(ComboBox combo) =>
             (combo.SelectedItem as ComboBoxItem)?.Tag as string;
+
+        // ממיר ערך KeyboardScale ל-Tag הקרוב ביותר ב-ComboBox (1.0 / 1.3 / 1.6 / 2.0).
+        private static string KeyboardScaleToTag(double scale)
+        {
+            string[] options = { "1.0", "1.3", "1.6", "2.0" };
+            string best = "1.0";
+            double minDiff = double.MaxValue;
+            foreach (var o in options)
+            {
+                if (!double.TryParse(o, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var v)) continue;
+                double diff = Math.Abs(v - scale);
+                if (diff < minDiff) { minDiff = diff; best = o; }
+            }
+            return best;
+        }
+
+        private static double ParseKeyboardScale(string? tag)
+        {
+            if (double.TryParse(tag, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0)
+                return v;
+            return 1.0;
+        }
 
         private void PopulateAbout()
         {
@@ -790,6 +815,7 @@ namespace Kolsites
 
             _settings.ShowVirtualKeyboard = ShowKeyboardToggle.IsOn;
             _settings.DefaultKeyboardLayout = GetTag(KeyboardLayoutCombo) ?? "he";
+            _settings.KeyboardScale = ParseKeyboardScale(GetTag(KeyboardScaleCombo));
             _settings.BlockContextMenu = BlockContextMenuToggle.IsOn;
             _settings.ClearCacheOnClose = ClearCacheOnCloseToggle.IsOn;
             _settings.ShowNoInternetOverlay = ShowNoInternetOverlayToggle.IsOn;

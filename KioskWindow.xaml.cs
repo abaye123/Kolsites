@@ -589,6 +589,7 @@ namespace Kolsites
                 return;
             }
 
+            Keyboard.SetScale(_settings.KeyboardScale);
             Keyboard.SetInitialLayout(_settings.DefaultKeyboardLayout);
 
             Keyboard.KeyPressed += async (key) =>

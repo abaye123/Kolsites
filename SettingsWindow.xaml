@@ -209,6 +209,20 @@
                                 <ComboBoxItem Tag="num" Content="מספרים"/>
                             </ComboBox>
                         </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="גודל המקלדת"
+                                       Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                            <ComboBox x:Name="KeyboardScaleCombo" HorizontalAlignment="Stretch" MinWidth="240">
+                                <ComboBoxItem Tag="1.0" Content="רגיל"/>
+                                <ComboBoxItem Tag="1.3" Content="גדול"/>
+                                <ComboBoxItem Tag="1.6" Content="גדול מאוד"/>
+                                <ComboBoxItem Tag="2.0" Content="ענק"/>
+                            </ComboBox>
+                            <TextBlock Text="שימושי במסך לאורך - מאפשר מקשים גדולים יותר ומקלדת שתופסת גובה רב יותר."
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
                         <ToggleSwitch x:Name="BlockContextMenuToggle"
                                       Header="חסום תפריט הקשר ימני בדפדפן"
                                       OnContent="כן" OffContent="לא"/>

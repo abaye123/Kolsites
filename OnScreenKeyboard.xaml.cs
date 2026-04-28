@@ -44,6 +44,10 @@ namespace Kolsites
         private enum Layout { Hebrew, EnglishLower, EnglishUpper, Numbers }
         private Layout _currentLayout = Layout.Hebrew;
 
+        // מכפיל גודל - משפיע על MinWidth/MinHeight/FontSize/Margin של כל המקשים.
+        // ברירת המחדל היא 1.0 (גודל רגיל); ערכים גבוהים יותר מגדילים את כל המקלדת.
+        private double _scale = 1.0;
+
         public OnScreenKeyboard()
         {
             InitializeComponent();
@@ -59,6 +63,15 @@ namespace Kolsites
                 "num" => Layout.Numbers,
                 _ => Layout.Hebrew
             };
+            Build();
+        }
+
+        /// <summary>קובע את מכפיל הגודל ובונה מחדש את המקלדת. ערך &lt;= 0 נורמל ל-1.0.</summary>
+        public void SetScale(double scale)
+        {
+            if (scale <= 0) scale = 1.0;
+            if (Math.Abs(_scale - scale) < 0.001) return;
+            _scale = scale;
             Build();
         }
 
@@ -115,16 +128,18 @@ namespace Kolsites
             // רווח
             var space = MakeKey(" ", "רווח");
             space.Style = (Style)Resources["WideKeyButtonStyle"];
-            space.MinWidth = 250;
+            space.MinWidth = 250 * _scale;
+            ApplyKeyScale(space);
             sp.Children.Add(space);
 
             // Backspace
             var back = new Button
             {
                 Style = (Style)Resources["KeyButtonStyle"],
-                MinWidth = 80,
+                MinWidth = 80 * _scale,
                 Content = new FontIcon { Glyph = "", FontSize = 16 } // BackSpace
             };
+            ApplyKeyScale(back);
             back.Click += (_, _) => BackspacePressed?.Invoke();
             sp.Children.Add(back);
 
@@ -132,9 +147,10 @@ namespace Kolsites
             var enter = new Button
             {
                 Style = (Style)Resources["KeyButtonStyle"],
-                MinWidth = 80,
+                MinWidth = 80 * _scale,
                 Content = new FontIcon { Glyph = "", FontSize = 16 } // Enter
             };
+            ApplyKeyScale(enter);
             enter.Click += (_, _) => EnterPressed?.Invoke();
             sp.Children.Add(enter);
 
@@ -146,8 +162,10 @@ namespace Kolsites
             var btn = new Button
             {
                 Style = (Style)Resources["KeyButtonStyle"],
+                MinWidth = 58 * _scale,
                 Content = text == " " ? "רווח" : text
             };
+            ApplyKeyScale(btn);
 
             if (toolTip != null)
                 ToolTipService.SetToolTip(btn, toolTip);
@@ -161,6 +179,10 @@ namespace Kolsites
             var btn = new Button
             {
                 Style = (Style)Resources["LayoutToggleStyle"],
+                MinWidth = 78 * _scale,
+                MinHeight = 58 * _scale,
+                FontSize = 14 * _scale,
+                Margin = new Thickness(3 * _scale),
                 Content = label
             };
             if (isActive || _currentLayout == target)
@@ -174,6 +196,19 @@ namespace Kolsites
                 Build();
             };
             return btn;
+        }
+
+        // מחיל גודל סקייל על מקש: גובה, פונט ומרווח. ה-MinWidth נקבע נפרד לפי
+        // סוג המקש (סטנדרטי/רחב/רווח) כדי שכל הקנה מידה ייצא יחסי לכל סוג.
+        private void ApplyKeyScale(Control btn)
+        {
+            btn.MinHeight = 58 * _scale;
+            btn.FontSize = 22 * _scale;
+            btn.Margin = new Thickness(3 * _scale);
+
+            // הגדלת אייקון בתוך הכפתור (כמו על Backspace/Enter) ביחס לסקייל
+            if (btn is ContentControl cc && cc.Content is FontIcon icon)
+                icon.FontSize = 16 * _scale;
         }
     }
 }
