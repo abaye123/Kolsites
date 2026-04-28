@@ -224,6 +224,35 @@
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="סיסמה לפתיחת ההגדרות מהקיוסק"
+                                       Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <PasswordBox x:Name="KioskSettingsPasswordBox"
+                                             Grid.Column="0"
+                                             HorizontalAlignment="Stretch"
+                                             PasswordRevealMode="Peek"/>
+                                <Button x:Name="ClearKioskPasswordButton"
+                                        Grid.Column="1"
+                                        Click="ClearKioskPasswordButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="14"/>
+                                        <TextBlock Text="הסר סיסמה"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="KioskPasswordStatusText"
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            <TextBlock Text="הסיסמה נשמרת מוצפנת (PBKDF2-HMAC-SHA256). כשמוגדרת סיסמה - לחיצה כפולה מהירה על האייקון שבחלון 'אודות' של הקיוסק תפתח חלון להזנת הסיסמה ופתיחת ההגדרות. השאר ריק כדי לא לשנות; ל'הסר סיסמה' כדי לנטרל את הקיצור."
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
                     </StackPanel>
                 </Expander>
 
@@ -278,12 +307,22 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="פותח על ידי abaye"
-                                       Style="{ThemeResource BodyTextBlockStyle}"/>
-                            <TextBlock Text="קוד פתוח · תרומות ודיווח על באגים מתקבלים בברכה"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                            <Image Source="Assets/abaye.png"
+                                   Width="56" Height="56"
+                                   VerticalAlignment="Center"/>
+                            <StackPanel VerticalAlignment="Center" Spacing="4">
+                                <TextBlock Text="פותח על ידי abaye"
+                                           Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                                <TextBlock Text="קוד פתוח · תרומות ודיווח על באגים מתקבלים בברכה"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                                <HyperlinkButton Content="abaye.co"
+                                                 NavigateUri="https://abaye.co"
+                                                 Padding="0"
+                                                 Margin="0"/>
+                            </StackPanel>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -311,10 +350,15 @@
                                 Padding="14,10">
                             <StackPanel Orientation="Horizontal" Spacing="10"
                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Path Width="18" Height="18"
-                                      Stretch="Uniform"
-                                      Fill="{ThemeResource SystemFillColorCautionBrush}"
-                                      Data="M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z"/>
+                                <!-- אייקון נר נשמה: להבה צהובה מעל גוף נר -->
+                                <Viewbox Width="18" Height="18">
+                                    <Grid Width="24" Height="24">
+                                        <Path Fill="{ThemeResource TextFillColorPrimaryBrush}"
+                                              Data="M9,12L9,22L15,22L15,12Z"/>
+                                        <Path Fill="{ThemeResource SystemFillColorCautionBrush}"
+                                              Data="M12,2C9.5,5 9,7 9,9C9,10.5 10.3,11 12,11C13.7,11 15,10.5 15,9C15,7 14.5,5 12,2Z"/>
+                                    </Grid>
+                                </Viewbox>
                                 <TextBlock Text="התוכנה לע&quot;נ ר' משה ב&quot;ר אברהם זצ&quot;ל"
                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
                                            VerticalAlignment="Center"

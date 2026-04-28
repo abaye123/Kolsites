@@ -102,6 +102,12 @@ namespace Kolsites
         /// במקרה של ניתוקי רשת קלים זה יכול להפריע - אז עדיף להציג רק אייקון התראה בסרגל.
         /// </summary>
         public bool ShowNoInternetOverlay { get; set; } = false;
+
+        /// <summary>
+        /// סיסמה לפתיחת ההגדרות מתוך הקיוסק (לחיצה כפולה על הלוגו ב-About).
+        /// אם ריק - הקיצור מנוטרל לחלוטין; ברירת המחדל היא "ללא סיסמה" כדי שהקיוסק לא ייפתח להגדרות בטעות.
+        /// </summary>
+        public string KioskSettingsPassword { get; set; } = "";
     }
 
     public static class SettingsManager

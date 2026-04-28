@@ -23,6 +23,11 @@ namespace Kolsites
         private DesktopAcrylicController? _acrylicController;
         private SystemBackdropConfiguration? _backdropConfiguration;
 
+        // ה-hash המקורי שנטען מההגדרות. אם המשתמש לא מקליד סיסמה חדשה - שומרים אותו כמו שהוא.
+        private string _originalKioskPasswordHash = "";
+        // נדלק כש"הסר סיסמה" נלחץ - בשמירה נכתוב מחרוזת ריקה.
+        private bool _clearKioskPassword;
+
         public SettingsWindow(AppSettings settings)
         {
             InitializeComponent();
@@ -50,6 +55,11 @@ namespace Kolsites
             BlockContextMenuToggle.IsOn = _settings.BlockContextMenu;
             ClearCacheOnCloseToggle.IsOn = _settings.ClearCacheOnClose;
             ShowNoInternetOverlayToggle.IsOn = _settings.ShowNoInternetOverlay;
+
+            // לא טוענים את ה-hash לתוך הטופס - משאירים את השדה ריק ומציגים סטטוס.
+            _originalKioskPasswordHash = _settings.KioskSettingsPassword ?? "";
+            _clearKioskPassword = false;
+            UpdateKioskPasswordStatus();
 
             ButtonsList.ItemsSource = _buttons;
 
@@ -780,6 +790,18 @@ namespace Kolsites
             _settings.ClearCacheOnClose = ClearCacheOnCloseToggle.IsOn;
             _settings.ShowNoInternetOverlay = ShowNoInternetOverlayToggle.IsOn;
 
+            // לוגיקת סיסמת הקיוסק:
+            // 1) אם 'הסר סיסמה' נלחץ - שומרים ריק.
+            // 2) אם המשתמש הקליד סיסמה חדשה - מצפינים ושומרים hash.
+            // 3) אחרת - משאירים את ה-hash הקיים (אין שינוי).
+            var newPwd = KioskSettingsPasswordBox.Password ?? "";
+            if (_clearKioskPassword)
+                _settings.KioskSettingsPassword = "";
+            else if (!string.IsNullOrEmpty(newPwd))
+                _settings.KioskSettingsPassword = PasswordHasher.Hash(newPwd);
+            else
+                _settings.KioskSettingsPassword = _originalKioskPasswordHash;
+
             _settings.Buttons = _buttons.ToList();
 
             SettingsManager.Save(_settings);
@@ -787,6 +809,28 @@ namespace Kolsites
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e) => Close();
+
+        private void ClearKioskPasswordButton_Click(object sender, RoutedEventArgs e)
+        {
+            _clearKioskPassword = true;
+            KioskSettingsPasswordBox.Password = "";
+            UpdateKioskPasswordStatus();
+        }
+
+        private void UpdateKioskPasswordStatus()
+        {
+            bool hasExisting =
+                !_clearKioskPassword && !string.IsNullOrEmpty(_originalKioskPasswordHash);
+
+            if (_clearKioskPassword)
+                KioskPasswordStatusText.Text = "הסיסמה תוסר בעת השמירה (הקיצור יושבת).";
+            else if (hasExisting)
+                KioskPasswordStatusText.Text = "סיסמה מוגדרת. השאר ריק כדי לא לשנות.";
+            else
+                KioskPasswordStatusText.Text = "אין סיסמה - הקיצור מנוטרל. הזן סיסמה כדי להפעיל אותו.";
+
+            ClearKioskPasswordButton.IsEnabled = hasExisting;
+        }
 
         #endregion
     }

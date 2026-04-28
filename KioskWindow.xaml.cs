@@ -29,6 +29,9 @@ namespace Kolsites
         private bool _webViewReady;
         private string? _currentUrl;
         private SiteButton? _currentButton;
+        // ההוסט (לאחר נרמול) של האתר הנוכחי - משמש לחסימת ניווט עליון לאתרים אחרים.
+        // נקבע ב-NavigateAsync לפי כתובת הכפתור, ומאופס בלחצן הבית.
+        private string? _expectedHost;
 
         public KioskWindow(AppSettings settings, Action onClosed)
         {
@@ -372,8 +375,29 @@ namespace Kolsites
                         e.Handled = true;
                     };
 
-                    WebView.CoreWebView2.NavigationStarting += (_, _) =>
+                    WebView.CoreWebView2.NavigationStarting += (_, e) =>
                     {
+                        // חסימת ניווט עליון (ולא משאבים בתוך הדף - אלה לא עוברים כאן)
+                        // לכל אתר חיצוני - כלומר שההוסט שלו שונה מההוסט של כתובת הכפתור הנוכחי.
+                        // לחיצה על כפתור באתר אחר ב-strip עוברת קודם דרך NavigateAsync שמעדכן את ההוסט,
+                        // לכן ניווט יזום של המשתמש מתוך הקיוסק תמיד מותר.
+                        if (IsBlockedExternalNavigation(e.Uri))
+                        {
+                            e.Cancel = true;
+                            // ביטול לבד יכול להותיר מסך לבן אם הדף כבר התחיל להתפרק
+                            // (למשל בעקבות שליחת טופס או location.href). מטעינים מחדש את האתר המקורי.
+                            var fallback = _currentUrl;
+                            if (!string.IsNullOrEmpty(fallback))
+                            {
+                                DispatcherQueue.GetForCurrentThread().TryEnqueue(() =>
+                                {
+                                    try { WebView.CoreWebView2?.Navigate(fallback); }
+                                    catch { }
+                                });
+                            }
+                            return;
+                        }
+
                         LoadingPanel.Visibility = Visibility.Visible;
                         WelcomePanel.Visibility = Visibility.Collapsed;
                     };
@@ -381,6 +405,12 @@ namespace Kolsites
                     {
                         LoadingPanel.Visibility = Visibility.Collapsed;
                     };
+
+                    // הזרקת חוסם נטפרי בכל דף - רץ לפני כל סקריפט אחר באמצעות
+                    // AddScriptToExecuteOnDocumentCreatedAsync, וכך מצליח להסיר את תגי ה-script
+                    // עוד לפני שהדפדפן הספיק לבצע אותם.
+                    await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                        NetfreeBlockerScript);
                 }
             }
             catch (Exception ex)
@@ -388,6 +418,71 @@ namespace Kolsites
                 StatusText.Text = $"שגיאה ב-WebView2: {ex.Message}";
             }
         }
+
+        // סקריפט ברירת מחדל שמוזרק לכל אתר ומסיר את כרטסת נטפרי:
+        // 1) MutationObserver שמסיר תגי script ואלמנטים של נטפרי ברגע שמתווספים ל-DOM
+        //    (לפני שהדפדפן הספיק לבצע את הסקריפט).
+        // 2) sweep ראשוני בסיום הטעינה כגיבוי במקרה שמשהו פספס.
+        private const string NetfreeBlockerScript = @"
+(function() {
+    var scriptUrls = [
+        'https://netfree.link/card/card.js',
+        'https://netfree.link/api/card/data.js',
+        'https://netfree.link/injection-script/go-payment.js',
+        'https://netfree.link/injection-script/popup-card-init.js'
+    ];
+    var ids = [
+        'netfree-popup-window',
+        'netfree-popup-window-main',
+        'netfree-popup-window-hand-pull',
+        'netfree-popup-window-iframe'
+    ];
+
+    function tryRemove(node) {
+        if (!node || node.nodeType !== 1) return;
+        if (node.tagName === 'SCRIPT') {
+            var src = node.getAttribute && node.getAttribute('src');
+            if (src && scriptUrls.indexOf(src) !== -1) {
+                if (node.parentNode) node.parentNode.removeChild(node);
+                return;
+            }
+        }
+        if (node.id && ids.indexOf(node.id) !== -1) {
+            if (node.parentNode) node.parentNode.removeChild(node);
+        }
+    }
+
+    function sweep() {
+        for (var i = 0; i < ids.length; i++) {
+            var el = document.getElementById(ids[i]);
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+        var scripts = document.querySelectorAll('script[src]');
+        for (var j = 0; j < scripts.length; j++) {
+            var src = scripts[j].getAttribute('src');
+            if (src && scriptUrls.indexOf(src) !== -1 && scripts[j].parentNode) {
+                scripts[j].parentNode.removeChild(scripts[j]);
+            }
+        }
+    }
+
+    try {
+        var observer = new MutationObserver(function(mutations) {
+            for (var i = 0; i < mutations.length; i++) {
+                var added = mutations[i].addedNodes;
+                for (var j = 0; j < added.length; j++) tryRemove(added[j]);
+            }
+        });
+        observer.observe(document, { childList: true, subtree: true });
+    } catch (e) { }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        sweep();
+    } else {
+        document.addEventListener('DOMContentLoaded', sweep);
+    }
+})();
+";
 
         private async Task NavigateAsync(SiteButton btn)
         {
@@ -401,6 +496,7 @@ namespace Kolsites
 
             _currentButton = btn;
             _currentUrl = AppendCacheBuster(btn.Url);
+            _expectedHost = TryGetHost(btn.Url);
 
             WelcomePanel.Visibility = Visibility.Collapsed;
             WebView.Visibility = Visibility.Visible;
@@ -442,6 +538,46 @@ namespace Kolsites
             if (string.IsNullOrEmpty(url)) return url;
             var separator = url.Contains('?') ? "&" : "?";
             return $"{url}{separator}_t={DateTime.Now.Ticks}";
+        }
+
+        // סכמות שמפעילות אפליקציה חיצונית (לקוח דוא"ל, חייגן טלפון וכד') - חסומות תמיד בקיוסק.
+        private static readonly string[] BlockedSchemes =
+            { "mailto", "tel", "callto", "sms", "skype", "whatsapp" };
+
+        private bool IsBlockedExternalNavigation(string targetUri)
+        {
+            if (string.IsNullOrWhiteSpace(targetUri)) return false;
+
+            // חסימה קבועה של סכמות שפותחות אפליקציות חיצוניות (mailto, tel וכו'),
+            // ללא תלות ב-_expectedHost - גם בטעינה הראשונית.
+            if (Uri.TryCreate(targetUri, UriKind.Absolute, out var uri))
+            {
+                foreach (var s in BlockedSchemes)
+                    if (string.Equals(uri.Scheme, s, StringComparison.OrdinalIgnoreCase))
+                        return true;
+            }
+
+            // לפני שנקבע אתר נוכחי - מאפשרים הכל (טעינה ראשונית של welcome וכד').
+            if (string.IsNullOrEmpty(_expectedHost)) return false;
+
+            var targetHost = TryGetHost(targetUri);
+            // סכמות לא-http (about:blank, data:, javascript:) - לא חוסמים, לא ניווט לאתר חיצוני.
+            if (targetHost == null) return false;
+
+            // התאמה: אותו הוסט בדיוק או תת-דומיין שלו (sub.example.com מקובל אם הכפתור הוא example.com).
+            if (targetHost == _expectedHost) return false;
+            if (targetHost.EndsWith("." + _expectedHost, StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        private static string? TryGetHost(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return null;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return null;
+            var host = uri.Host.ToLowerInvariant();
+            if (host.StartsWith("www.")) host = host.Substring(4);
+            return host;
         }
 
         private void HookKeyboard()
@@ -603,6 +739,7 @@ namespace Kolsites
         {
             _currentButton = null;
             _currentUrl = null;
+            _expectedHost = null;
             _siteScriptsTimer.Stop();
             WebView.Visibility = Visibility.Collapsed;
             WelcomePanel.Visibility = Visibility.Visible;
@@ -643,14 +780,16 @@ namespace Kolsites
             catch { }
 
             var headerStack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14 };
-            headerStack.Children.Add(new Image
+            // לוגו התוכנה - לחיצה כפולה מהירה עליו תפתח את ההגדרות (אם הוגדרה סיסמה)
+            var appLogo = new Image
             {
                 Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
                     new Uri("ms-appx:///Assets/AppIcon.png")),
                 Width = 56,
                 Height = 56,
                 VerticalAlignment = VerticalAlignment.Top
-            });
+            };
+            headerStack.Children.Add(appLogo);
 
             var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2 };
             titleStack.Children.Add(new TextBlock
@@ -673,24 +812,62 @@ namespace Kolsites
             });
             headerStack.Children.Add(titleStack);
 
-            var creditStack = new StackPanel { Spacing = 2 };
-            creditStack.Children.Add(new TextBlock
+            // קרדיט עם הלוגו של abaye בצד
+            var creditTextStack = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Spacing = 4
+            };
+            creditTextStack.Children.Add(new TextBlock
             {
                 Text = "פותח על ידי abaye",
-                Style = (Style)Application.Current.Resources["BodyTextBlockStyle"]
+                Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"]
+            });
+            creditTextStack.Children.Add(new TextBlock
+            {
+                Text = "קוד פתוח · תרומות ודיווח על באגים מתקבלים בברכה",
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                TextWrapping = TextWrapping.Wrap
             });
 
-            // Heart Path - לזהות עם הסטיילינג של הסטינג'ס
-            var heartPath = new Microsoft.UI.Xaml.Shapes.Path
+            var creditStack = new StackPanel
             {
-                Width = 22,
-                Height = 22,
-                Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
+                Orientation = Orientation.Horizontal,
+                Spacing = 14,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var abayeLogo = new Image
+            {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
+                    new Uri("ms-appx:///Assets/abaye.png")),
+                Width = 56,
+                Height = 56,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            creditStack.Children.Add(abayeLogo);
+            creditStack.Children.Add(creditTextStack);
+
+            // אייקון נר נשמה - להבה צהובה מעל גוף נר בצבע טקסט.
+            // שני Path נפרדים בתוך Grid 24x24, עטוף ב-Viewbox כדי לקבע לגודל 22x22.
+            var flamePath = new Microsoft.UI.Xaml.Shapes.Path
+            {
                 Fill = (Brush)Application.Current.Resources["SystemFillColorCautionBrush"],
                 Data = (Microsoft.UI.Xaml.Media.Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(
                     typeof(Microsoft.UI.Xaml.Media.Geometry),
-                    "M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z")
+                    "M12,2C9.5,5 9,7 9,9C9,10.5 10.3,11 12,11C13.7,11 15,10.5 15,9C15,7 14.5,5 12,2Z")
             };
+            var candleBodyPath = new Microsoft.UI.Xaml.Shapes.Path
+            {
+                Fill = (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"],
+                Data = (Microsoft.UI.Xaml.Media.Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(
+                    typeof(Microsoft.UI.Xaml.Media.Geometry),
+                    "M9,12L9,22L15,22L15,12Z")
+            };
+            var candleInner = new Grid { Width = 24, Height = 24 };
+            candleInner.Children.Add(candleBodyPath);
+            candleInner.Children.Add(flamePath);
+            var candleHost = new Viewbox { Width = 22, Height = 22, Child = candleInner };
 
             var dedicationStack = new StackPanel
             {
@@ -699,7 +876,7 @@ namespace Kolsites
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            dedicationStack.Children.Add(heartPath);
+            dedicationStack.Children.Add(candleHost);
             dedicationStack.Children.Add(new TextBlock
             {
                 Text = "התוכנה לע\"נ ר' משה ב\"ר אברהם זצ\"ל",
@@ -733,7 +910,90 @@ namespace Kolsites
                 FlowDirection = FlowDirection.RightToLeft
             };
 
+            // קיצור גישה להגדרות: לחיצה כפולה מהירה על לוגו התוכנה פותחת בקשת סיסמה.
+            // הקיצור פעיל רק אם המשתמש הגדיר סיסמה בהגדרות (KioskSettingsPassword); אחרת
+            // הלחיצה הכפולה מתעלמת לחלוטין כדי שלא תהיה דרך לעקוף את הקיוסק במחשבים ציבוריים.
+            appLogo.DoubleTapped += async (_, _) =>
+            {
+                if (string.IsNullOrEmpty(_settings.KioskSettingsPassword)) return;
+                dialog.Hide();
+                if (await PromptForKioskSettingsPasswordAsync())
+                {
+                    try
+                    {
+                        // הפעלת ההגדרות כתהליך נפרד (כמו הפעלה רגילה דרך הקיצור) -
+                        // יש מיוטקס נפרד ל-Settings ב-Program.cs כך שזה לא מתנגש.
+                        var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                        if (!string.IsNullOrEmpty(exe))
+                        {
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = exe!,
+                                Arguments = "--settings",
+                                UseShellExecute = true
+                            });
+                        }
+                        // סגירת חלון הקיוסק כדי שחלון ההגדרות יוצג מקדימה
+                        // (הקיוסק תמיד-למעלה והיה מסתיר את ההגדרות).
+                        this.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        StatusText.Text = $"שגיאה בפתיחת ההגדרות: {ex.Message}";
+                    }
+                }
+            };
+
             await dialog.ShowAsync();
+        }
+
+        private async Task<bool> PromptForKioskSettingsPasswordAsync()
+        {
+            var passwordBox = new PasswordBox
+            {
+                PlaceholderText = "סיסמה",
+                Width = 260,
+                PasswordRevealMode = PasswordRevealMode.Peek
+            };
+            var content = new StackPanel { Spacing = 8 };
+            content.Children.Add(new TextBlock
+            {
+                Text = "הזן סיסמה לפתיחת ההגדרות:",
+                TextWrapping = TextWrapping.Wrap
+            });
+            content.Children.Add(passwordBox);
+
+            var dialog = new ContentDialog
+            {
+                Title = "פתיחת הגדרות",
+                Content = content,
+                PrimaryButtonText = "אישור",
+                CloseButtonText = "ביטול",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = RootGrid.XamlRoot,
+                FlowDirection = FlowDirection.RightToLeft
+            };
+
+            // פוקוס אוטומטי על שדה הסיסמה כשהדיאלוג נפתח
+            dialog.Opened += (_, _) => passwordBox.Focus(FocusState.Programmatic);
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary) return false;
+
+            if (PasswordHasher.Verify(passwordBox.Password, _settings.KioskSettingsPassword))
+                return true;
+
+            // סיסמה שגויה - הודעה למשתמש (לא חושפים אם המשתמש קרוב לנכון)
+            var err = new ContentDialog
+            {
+                Title = "סיסמה שגויה",
+                Content = "הסיסמה שהוזנה אינה נכונה.",
+                CloseButtonText = "סגור",
+                XamlRoot = RootGrid.XamlRoot,
+                FlowDirection = FlowDirection.RightToLeft
+            };
+            await err.ShowAsync();
+            return false;
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
