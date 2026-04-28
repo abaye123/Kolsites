@@ -950,6 +950,15 @@ namespace Kolsites
 
         private async Task<bool> PromptForKioskSettingsPasswordAsync()
         {
+            var state = KioskAuthState.Load();
+
+            // אם נעולים - מציגים את הודעת הנעילה ולא חושפים שדה סיסמה כלל.
+            if (state.IsLocked(out var lockedRemaining))
+            {
+                await ShowLockoutDialogAsync(lockedRemaining);
+                return false;
+            }
+
             var passwordBox = new PasswordBox
             {
                 PlaceholderText = "סיסמה",
@@ -982,19 +991,52 @@ namespace Kolsites
             if (result != ContentDialogResult.Primary) return false;
 
             if (PasswordHasher.Verify(passwordBox.Password, _settings.KioskSettingsPassword))
-                return true;
-
-            // סיסמה שגויה - הודעה למשתמש (לא חושפים אם המשתמש קרוב לנכון)
-            var err = new ContentDialog
             {
-                Title = "סיסמה שגויה",
-                Content = "הסיסמה שהוזנה אינה נכונה.",
+                state.RecordSuccess();
+                return true;
+            }
+
+            // סיסמה שגויה - מתעדים נסיון. אם הגענו לסף - נעילה ל-30 דקות.
+            state.RecordFailure();
+
+            if (state.IsLocked(out var newLockRemaining))
+            {
+                await ShowLockoutDialogAsync(newLockRemaining);
+            }
+            else
+            {
+                int attemptsLeft = KioskAuthState.MaxAttempts - state.FailedAttempts;
+                string suffix = attemptsLeft == 1
+                    ? "נותר נסיון אחד לפני נעילה של 30 דקות."
+                    : $"נותרו עוד {attemptsLeft} נסיונות לפני נעילה של 30 דקות.";
+                var err = new ContentDialog
+                {
+                    Title = "סיסמה שגויה",
+                    Content = $"הסיסמה שהוזנה אינה נכונה. {suffix}",
+                    CloseButtonText = "סגור",
+                    XamlRoot = RootGrid.XamlRoot,
+                    FlowDirection = FlowDirection.RightToLeft
+                };
+                await err.ShowAsync();
+            }
+            return false;
+        }
+
+        private async Task ShowLockoutDialogAsync(TimeSpan remaining)
+        {
+            int totalMinutes = (int)Math.Ceiling(remaining.TotalMinutes);
+            string remText = totalMinutes <= 1
+                ? "נותרה דקה"
+                : $"נותרו עוד {totalMinutes} דקות";
+            var dialog = new ContentDialog
+            {
+                Title = "גישה חסומה זמנית",
+                Content = $"בעקבות {KioskAuthState.MaxAttempts} נסיונות שגויים ברצף, הגישה להגדרות נחסמה.\n{remText} עד שהחסימה תוסר.",
                 CloseButtonText = "סגור",
                 XamlRoot = RootGrid.XamlRoot,
                 FlowDirection = FlowDirection.RightToLeft
             };
-            await err.ShowAsync();
-            return false;
+            await dialog.ShowAsync();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
