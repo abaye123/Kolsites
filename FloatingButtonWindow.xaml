@@ -5,7 +5,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Kolsites">
 
-    <Grid x:Name="RootGrid" Background="White">
+    <Grid x:Name="RootGrid"
+            Background="White">
         <!-- כפתור מרובע (גובה=רוחב, נקבע ע"י ButtonSize בהגדרות) עם פינות מעוגלות מתונות.
              החלון עצמו אטום בלבן (אין color-key). -->
         <Button x:Name="OpenButton"
@@ -17,16 +18,24 @@
                 CornerRadius="14">
             <!-- דריסת hover/pressed כך שכל המצבים ייצבעו בלבן/חצי-לבן, ולא יחזרו לצבעי ערכת הנושא. -->
             <Button.Resources>
-                <SolidColorBrush x:Key="ButtonBackground" Color="White"/>
-                <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F0F0F0"/>
-                <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#E0E0E0"/>
-                <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="White"/>
-                <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent"/>
-                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
-                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+                <SolidColorBrush x:Key="ButtonBackground"
+                        Color="White"/>
+                <SolidColorBrush x:Key="ButtonBackgroundPointerOver"
+                        Color="#F0F0F0"/>
+                <SolidColorBrush x:Key="ButtonBackgroundPressed"
+                        Color="#E0E0E0"/>
+                <SolidColorBrush x:Key="ButtonBackgroundDisabled"
+                        Color="White"/>
+                <SolidColorBrush x:Key="ButtonBorderBrush"
+                        Color="Transparent"/>
+                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver"
+                        Color="Transparent"/>
+                <SolidColorBrush x:Key="ButtonBorderBrushPressed"
+                        Color="Transparent"/>
             </Button.Resources>
 
-            <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+            <Grid HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch">
                 <Image x:Name="ButtonImage"
                        Source="Assets/AppIcon.png"
                        Stretch="Uniform"
@@ -40,6 +49,15 @@
                            TextAlignment="Center"
                            Margin="0,0,0,4"
                            Visibility="Collapsed"/>
+                <!-- A loading indicator that appears when the button is pressed until the kiosk window comes up,
+so that there is immediate visual feedback to the user that the action has been accepted. -->
+                <ProgressRing x:Name="LoadingRing"
+                              IsActive="False"
+                              Visibility="Collapsed"
+                              Width="48"
+                              Height="48"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"/>
             </Grid>
         </Button>
     </Grid>

@@ -86,24 +86,28 @@ namespace Kolsites
 
             int x = _settings.ButtonPosition switch
             {
-                FloatingButtonPosition.TopLeft or FloatingButtonPosition.BottomLeft or FloatingButtonPosition.LeftCenter
-                    => waX + margin,
-                FloatingButtonPosition.TopRight or FloatingButtonPosition.BottomRight or FloatingButtonPosition.RightCenter
-                    => waX + waW - size - margin,
-                FloatingButtonPosition.TopCenter or FloatingButtonPosition.BottomCenter
-                    => waX + (waW - size) / 2,
-                _ => waX + waW - size - margin
+                FloatingButtonPosition.TopLeft
+                or FloatingButtonPosition.BottomLeft
+                or FloatingButtonPosition.LeftCenter => waX + margin,
+                FloatingButtonPosition.TopRight
+                or FloatingButtonPosition.BottomRight
+                or FloatingButtonPosition.RightCenter => waX + waW - size - margin,
+                FloatingButtonPosition.TopCenter or FloatingButtonPosition.BottomCenter => waX
+                    + (waW - size) / 2,
+                _ => waX + waW - size - margin,
             };
 
             int y = _settings.ButtonPosition switch
             {
-                FloatingButtonPosition.TopLeft or FloatingButtonPosition.TopRight or FloatingButtonPosition.TopCenter
-                    => waY + margin,
-                FloatingButtonPosition.BottomLeft or FloatingButtonPosition.BottomRight or FloatingButtonPosition.BottomCenter
-                    => waY + waH - size - margin,
-                FloatingButtonPosition.LeftCenter or FloatingButtonPosition.RightCenter
-                    => waY + (waH - size) / 2,
-                _ => waY + waH - size - margin
+                FloatingButtonPosition.TopLeft
+                or FloatingButtonPosition.TopRight
+                or FloatingButtonPosition.TopCenter => waY + margin,
+                FloatingButtonPosition.BottomLeft
+                or FloatingButtonPosition.BottomRight
+                or FloatingButtonPosition.BottomCenter => waY + waH - size - margin,
+                FloatingButtonPosition.LeftCenter or FloatingButtonPosition.RightCenter => waY
+                    + (waH - size) / 2,
+                _ => waY + waH - size - margin,
             };
 
             WindowHelper.MoveAndResize(this, x, y, size, size);
@@ -124,8 +128,15 @@ namespace Kolsites
                 // בלי לגנוב פוקוס מהתוכנה הפעילה (חשוב כי הכפתור לא צריך פוקוס - רק נראות).
                 var hWnd = WindowHelper.GetHwnd(this);
                 // ללא SWP_SHOWWINDOW כדי שלא נחזיר לראווה כפתור שהוסתר ידנית בעת פתיחת הקיוסק
-                SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                SetWindowPos(
+                    hWnd,
+                    HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+                );
             }
             catch { }
         }
@@ -136,8 +147,15 @@ namespace Kolsites
         private const uint SWP_NOACTIVATE = 0x0010;
 
         [DllImport("user32.dll")]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
-            int X, int Y, int cx, int cy, uint uFlags);
+        private static extern bool SetWindowPos(
+            IntPtr hWnd,
+            IntPtr hWndInsertAfter,
+            int X,
+            int Y,
+            int cx,
+            int cy,
+            uint uFlags
+        );
 
         private void ApplyToolWindowExStyle()
         {
@@ -149,12 +167,28 @@ namespace Kolsites
 
         private void OpenButton_Click(object sender, RoutedEventArgs e)
         {
-            // עצירת הטיימר והסתרת הכפתור בעת פתיחת חלון הקיוסק
             _topmostTimer?.Stop();
-            this.AppWindow?.Hide();
 
-            _kioskWindow = new KioskWindow(_settings, OnKioskClosed);
-            _kioskWindow.Activate();
+            // הצגת חיווי טעינה במקום האייקון - משוב מיידי למשתמש שהלחיצה התקבלה
+            // ושהמערכת בעיצומה של פתיחת החלון.
+            ShowLoadingIndicator(true);
+            OpenButton.IsEnabled = false;
+
+            // Hiding the floating button only after the kiosk window has actually come up on the screen
+            // (Activated event fires after the window is already visible to the user).
+            // This avoids a "blank" moment where there is no button and no window, which makes you think the software has closed.
+            var kiosk = new KioskWindow(_settings, OnKioskClosed);
+            _kioskWindow = kiosk;
+
+            bool floatingHidden = false;
+            kiosk.Activated += (_, _) =>
+            {
+                if (floatingHidden)
+                    return;
+                floatingHidden = true;
+                this.AppWindow?.Hide();
+            };
+            kiosk.Activate();
         }
 
         private void OnKioskClosed()
@@ -163,11 +197,24 @@ namespace Kolsites
             try
             {
                 _kioskWindow = null;
+                ShowLoadingIndicator(false);
+                OpenButton.IsEnabled = true;
                 this.AppWindow?.Show();
                 EnsureTopmost();
                 _topmostTimer?.Start();
             }
             catch { }
+        }
+
+        private void ShowLoadingIndicator(bool show)
+        {
+            LoadingRing.IsActive = show;
+            LoadingRing.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            ButtonImage.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
+            ButtonText.Visibility =
+                show || string.IsNullOrWhiteSpace(_settings.ButtonLabel)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
         }
 
         // P/Invoke - extended window style
