@@ -823,7 +823,7 @@ namespace Kolsites
         private async System.Threading.Tasks.Task ShowAboutDialogAsync()
         {
             // בניית תוכן ה-About ב-code (זהה ל-About שבהגדרות, ללא לינקי גיטהאב)
-            var version = "1.0.0";
+            var version = "1.1.0";
             try
             {
                 var v = typeof(KioskWindow).Assembly.GetName().Version;
