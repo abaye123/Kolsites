@@ -104,7 +104,7 @@
                 </Expander>
 
                 <!-- כפתורי האתרים -->
-                <Expander Header="כפתורי אתרים בחלון העילי" IsExpanded="True"
+                <Expander Header="כפתורי אתרים בחלון העילי" IsExpanded="False"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                     <StackPanel Spacing="10" Padding="4,8">
                         <TextBlock Text="גרור פריטים לסידור מחדש. סמן/בטל סימון כדי להפעיל/להשבית."
