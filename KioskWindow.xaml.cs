@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI;
@@ -20,7 +22,16 @@ namespace Kolsites
     {
         private const int InactivityTimeoutSeconds = 45;
 
+        // ערכי localStorage שיש לשמר על פני ניקוי cache. נשמרים אוטומטית מהדף לדיסק בכל שינוי,
+        // ומוזרקים חזרה לדף בכל טעינה לפני שסקריפטי הדף רצים. ההוסט מנורמל ל-lowercase ובלי "www.".
+        private static readonly (string Host, string Key)[] PreservedStorageEntries = new[]
+        {
+            ("shulchoni.abaye.co", "API_KEY"),
+        };
+
         private readonly AppSettings _settings;
+        private Dictionary<string, string> _preservedStorageValues = new();
+        private string? _preserveStorageScriptId;
         private readonly Action _onClosed;
         private readonly DispatcherQueueTimer _topmostTimer;
         private readonly DispatcherQueueTimer _internetTimer;
@@ -417,19 +428,28 @@ namespace Kolsites
                     await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                         InputFocusListenerScript);
 
+                    // טעינת ערכי localStorage השמורים מהדיסק והזרקת סקריפט שמשחזר/מסנכרן אותם.
+                    _preservedStorageValues = PreservedStorageManager.Load();
+                    await UpdatePreservedStorageScriptAsync();
+
                     WebView.CoreWebView2.WebMessageReceived += (_, e) =>
                     {
+                        // קודם בודקים אם זו הודעת מחרוזת פשוטה (input_focused)
                         try
                         {
-                            var msg = e.TryGetWebMessageAsString();
-                            if (msg == "input_focused"
+                            var asString = e.TryGetWebMessageAsString();
+                            if (asString == "input_focused"
                                 && _settings.ShowVirtualKeyboard
                                 && _settings.AutoShowKeyboardOnFocus)
                             {
                                 ShowKeyboardUi();
+                                return;
                             }
                         }
-                        catch { }
+                        catch { /* לא מחרוזת - ננסה כ-JSON */ }
+
+                        // הודעת JSON - שמירה/עדכון של ערך localStorage שמור
+                        TryHandlePreserveStorageMessage(e);
                     };
                 }
             }
@@ -1146,6 +1166,123 @@ namespace Kolsites
             {
                 _ = WebView.CoreWebView2.Profile.ClearBrowsingDataAsync(
                     CoreWebView2BrowsingDataKinds.AllProfile);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// מסנכרן את הסקריפט שמוזרק בכל טעינת דף עם הערכים השמורים הנוכחיים.
+        /// בכל שינוי בערך השמור (post-message מהדף) - מסירים את הסקריפט הישן
+        /// ורושמים חדש עם הערך המעודכן ב-payload, כך שהשחזור בטעינה הבאה יהיה מדויק.
+        /// </summary>
+        private async Task UpdatePreservedStorageScriptAsync()
+        {
+            if (!_webViewReady || WebView.CoreWebView2 == null) return;
+
+            if (!string.IsNullOrEmpty(_preserveStorageScriptId))
+            {
+                try { WebView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_preserveStorageScriptId); }
+                catch { }
+                _preserveStorageScriptId = null;
+            }
+
+            var entriesData = PreservedStorageEntries.Select(e => new
+            {
+                host = e.Host.ToLowerInvariant(),
+                key = e.Key,
+                value = _preservedStorageValues.TryGetValue($"{e.Host.ToLowerInvariant()}|{e.Key}", out var v) ? v : null
+            }).ToArray();
+
+            var entriesJson = JsonSerializer.Serialize(entriesData);
+
+            var script = $@"(function(){{
+                try {{
+                    var entries = {entriesJson};
+                    var host = (location.hostname || '').toLowerCase();
+                    if (host.indexOf('www.') === 0) host = host.substring(4);
+                    var matched = entries.filter(function(e){{ return e.host === host; }});
+                    if (matched.length === 0) return;
+
+                    // שחזור: אם המפתח חסר ויש ערך שמור - מציבים אותו לפני שהדף ירוץ
+                    matched.forEach(function(e){{
+                        try {{
+                            if (e.value != null && !localStorage.getItem(e.key)) {{
+                                localStorage.setItem(e.key, e.value);
+                            }}
+                        }} catch(_) {{}}
+                    }});
+
+                    // דיווח להוסט על הערך הנוכחי לאחר טעינת הדף - לעדכון העותק השמור
+                    function reportAll() {{
+                        matched.forEach(function(e){{
+                            try {{
+                                var v = localStorage.getItem(e.key);
+                                if (v != null) chrome.webview.postMessage({{ type:'preserve-storage', host: e.host, key: e.key, value: v }});
+                            }} catch(_) {{}}
+                        }});
+                    }}
+                    if (document.readyState === 'complete') reportAll();
+                    else window.addEventListener('load', reportAll);
+
+                    // הוקינג של setItem לקליטת שינויים בזמן אמת
+                    try {{
+                        var origSet = Storage.prototype.setItem;
+                        Storage.prototype.setItem = function(k, v) {{
+                            var r = origSet.apply(this, arguments);
+                            try {{
+                                if (this === localStorage) {{
+                                    matched.forEach(function(e){{
+                                        if (k === e.key) {{
+                                            chrome.webview.postMessage({{ type:'preserve-storage', host: e.host, key: e.key, value: String(v) }});
+                                        }}
+                                    }});
+                                }}
+                            }} catch(_) {{}}
+                            return r;
+                        }};
+                    }} catch(_) {{}}
+                }} catch(_) {{}}
+            }})();";
+
+            try
+            {
+                _preserveStorageScriptId =
+                    await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// מטפל בהודעת preserve-storage מהדף: מעדכן את העותק במחזיק הזיכרון, שומר לדיסק
+        /// ורושם מחדש את הסקריפט עם הערך המעודכן.
+        /// </summary>
+        private void TryHandlePreserveStorageMessage(CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            try
+            {
+                var json = e.WebMessageAsJson;
+                if (string.IsNullOrEmpty(json)) return;
+
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
+                if (!doc.RootElement.TryGetProperty("type", out var typeProp) ||
+                    typeProp.GetString() != "preserve-storage") return;
+
+                var host = doc.RootElement.TryGetProperty("host", out var h) ? h.GetString() : null;
+                var key = doc.RootElement.TryGetProperty("key", out var k) ? k.GetString() : null;
+                var value = doc.RootElement.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String
+                    ? v.GetString()
+                    : null;
+
+                if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(key) || value == null) return;
+
+                var dictKey = $"{host.ToLowerInvariant()}|{key}";
+                if (_preservedStorageValues.TryGetValue(dictKey, out var existing) && existing == value)
+                    return;
+
+                _preservedStorageValues[dictKey] = value;
+                PreservedStorageManager.Save(_preservedStorageValues);
+                _ = UpdatePreservedStorageScriptAsync();
             }
             catch { }
         }

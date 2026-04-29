@@ -152,6 +152,48 @@ namespace Kolsites
         public List<BlockedTimeRange> BlockedTimeRanges { get; set; } = new();
     }
 
+    /// <summary>
+    /// ניהול ערכי localStorage שיש לשמר על אף ניקוי cache (למשל API_KEY של אתרי abaye).
+    /// הערכים נשמרים בקובץ נפרד בתיקיית ההגדרות, ומשוחזרים אוטומטית בטעינת דף של ההוסט המתאים.
+    /// </summary>
+    public static class PreservedStorageManager
+    {
+        // מפתח: "host|key" (למשל "shulchoni.abaye.co|API_KEY"). ערך: ערך ה-localStorage השמור.
+        private static readonly object _lock = new();
+
+        private static string FilePath => Path.Combine(
+            SettingsManager.GetSettingsFolder(), "preserved-storage.json");
+
+        public static Dictionary<string, string> Load()
+        {
+            try
+            {
+                if (!File.Exists(FilePath)) return new Dictionary<string, string>();
+                var json = File.ReadAllText(FilePath);
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                       ?? new Dictionary<string, string>();
+            }
+            catch
+            {
+                return new Dictionary<string, string>();
+            }
+        }
+
+        public static void Save(Dictionary<string, string> values)
+        {
+            try
+            {
+                lock (_lock)
+                {
+                    Directory.CreateDirectory(SettingsManager.GetSettingsFolder());
+                    var options = new JsonSerializerOptions { WriteIndented = true };
+                    File.WriteAllText(FilePath, JsonSerializer.Serialize(values, options));
+                }
+            }
+            catch { }
+        }
+    }
+
     public static class SettingsManager
     {
         private static readonly string SettingsFolder = Path.Combine(
