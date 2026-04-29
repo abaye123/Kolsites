@@ -643,19 +643,38 @@ namespace Kolsites
                 try
                 {
                     var escaped = System.Text.Json.JsonSerializer.Serialize(key);
+                    // משתמשים ב-native value setter כדי לעקוף את ה-value tracker של React/Vue,
+                    // ויורים את כל סט אירועי המקלדת כדי שאתרי הזדהות יזהו הקלדה אמיתית.
                     var script = $@"(function(){{
                         var el = document.activeElement;
-                        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {{
-                            if (el.isContentEditable) {{
-                                document.execCommand('insertText', false, {escaped});
-                            }} else {{
-                                var start = el.selectionStart || el.value.length;
-                                var end = el.selectionEnd || el.value.length;
-                                el.value = el.value.substring(0, start) + {escaped} + el.value.substring(end);
-                                var newPos = start + {escaped}.length;
-                                el.setSelectionRange(newPos, newPos);
-                                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                            }}
+                        if (!el) return;
+                        var text = {escaped};
+                        var charCode = text.length > 0 ? text.charCodeAt(0) : 0;
+                        var keyInit = {{ key: text, code: '', keyCode: charCode, which: charCode, bubbles: true, cancelable: true }};
+
+                        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {{
+                            el.dispatchEvent(new KeyboardEvent('keydown', keyInit));
+                            el.dispatchEvent(new KeyboardEvent('keypress', keyInit));
+
+                            var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                            var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+
+                            var start = el.selectionStart;
+                            var end = el.selectionEnd;
+                            if (start == null) start = el.value.length;
+                            if (end == null) end = el.value.length;
+                            var newValue = el.value.substring(0, start) + text + el.value.substring(end);
+                            setter.call(el, newValue);
+                            try {{ el.setSelectionRange(start + text.length, start + text.length); }} catch(_){{}}
+
+                            el.dispatchEvent(new InputEvent('input', {{ bubbles: true, cancelable: false, data: text, inputType: 'insertText' }}));
+                            el.dispatchEvent(new KeyboardEvent('keyup', keyInit));
+                            el.focus();
+                        }} else if (el.isContentEditable) {{
+                            el.dispatchEvent(new KeyboardEvent('keydown', keyInit));
+                            el.dispatchEvent(new KeyboardEvent('keypress', keyInit));
+                            document.execCommand('insertText', false, text);
+                            el.dispatchEvent(new KeyboardEvent('keyup', keyInit));
                             el.focus();
                         }}
                     }})();";
@@ -671,20 +690,42 @@ namespace Kolsites
                 {
                     var script = @"(function(){
                         var el = document.activeElement;
-                        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+                        if (!el) return;
+                        var keyInit = { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true, cancelable: true };
+
+                        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                            el.dispatchEvent(new KeyboardEvent('keydown', keyInit));
+
+                            var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+                            var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+
                             var start = el.selectionStart;
                             var end = el.selectionEnd;
+                            if (start == null) start = el.value.length;
+                            if (end == null) end = el.value.length;
+
+                            var newValue, newPos, didChange = false;
                             if (start === end && start > 0) {
-                                el.value = el.value.substring(0, start - 1) + el.value.substring(end);
-                                el.setSelectionRange(start - 1, start - 1);
+                                newValue = el.value.substring(0, start - 1) + el.value.substring(end);
+                                newPos = start - 1;
+                                didChange = true;
                             } else if (start !== end) {
-                                el.value = el.value.substring(0, start) + el.value.substring(end);
-                                el.setSelectionRange(start, start);
+                                newValue = el.value.substring(0, start) + el.value.substring(end);
+                                newPos = start;
+                                didChange = true;
                             }
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
+
+                            if (didChange) {
+                                setter.call(el, newValue);
+                                try { el.setSelectionRange(newPos, newPos); } catch(_){}
+                                el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: false, inputType: 'deleteContentBackward' }));
+                            }
+                            el.dispatchEvent(new KeyboardEvent('keyup', keyInit));
                             el.focus();
-                        } else if (el && el.isContentEditable) {
+                        } else if (el.isContentEditable) {
+                            el.dispatchEvent(new KeyboardEvent('keydown', keyInit));
                             document.execCommand('delete', false, null);
+                            el.dispatchEvent(new KeyboardEvent('keyup', keyInit));
                         }
                     })();";
                     await WebView.CoreWebView2.ExecuteScriptAsync(script);
@@ -697,15 +738,18 @@ namespace Kolsites
                 if (!_webViewReady) return;
                 try
                 {
+                    // לפני שליחה - יורים change/blur כדי לאפשר אימות-on-blur (חלק מטפסי React/Angular
+                    // מפעילים אימות רק אז ולא יקבלו את הערך אם לא נשלח).
                     var script = @"(function(){
                         var el = document.activeElement;
-                        if (el) {
-                            ['keydown','keypress','keyup'].forEach(function(t){
-                                el.dispatchEvent(new KeyboardEvent(t, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
-                            });
-                            if (el.form && typeof el.form.requestSubmit === 'function') {
-                                try { el.form.requestSubmit(); } catch(_){}
-                            }
+                        if (!el) return;
+                        var keyInit = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+                        el.dispatchEvent(new KeyboardEvent('keydown', keyInit));
+                        el.dispatchEvent(new KeyboardEvent('keypress', keyInit));
+                        try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch(_){}
+                        el.dispatchEvent(new KeyboardEvent('keyup', keyInit));
+                        if (el.form && typeof el.form.requestSubmit === 'function') {
+                            try { el.form.requestSubmit(); } catch(_){}
                         }
                     })();";
                     await WebView.CoreWebView2.ExecuteScriptAsync(script);
