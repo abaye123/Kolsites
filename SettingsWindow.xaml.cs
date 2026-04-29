@@ -145,7 +145,7 @@ namespace Kolsites
             var appWindow = GetAppWindow();
             if (appWindow == null) return;
 
-            appWindow.Resize(new SizeInt32(720, 920));
+            appWindow.Resize(new SizeInt32(950, 980));
 
             var area = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Primary);
             if (area != null)
