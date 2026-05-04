@@ -109,7 +109,10 @@ end;
 
 procedure InitializeWizard;
 begin
-  if NeedsWinAppRuntime then
+  // האזהרה על Windows App Runtime חסרה - מוצגת רק במצב אינטראקטיבי.
+  // במצב /SILENT או /VERYSILENT (עדכון אוטומטי) - דילוג מלא, כדי שלא לחסום את ההתקנה.
+  // המתקין אוטומטי מפעיל מתוך תוכנה רצה => כבר יש Runtime במחשב, אחרת לא היינו יכולים לרוץ.
+  if NeedsWinAppRuntime and not WizardSilent then
   begin
     MsgBox(
       'שים לב:' + #13#10 + #13#10 +
