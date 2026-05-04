@@ -251,6 +251,115 @@ namespace Kolsites
 
         #endregion
 
+        #region Update check
+
+        // נשמר בין 'בדוק עדכונים' ל-'הורד והתקן' כדי שלא נצטרך לקרוא שוב ל-API.
+        private UpdateChecker.ReleaseInfo? _pendingUpdate;
+
+        private async void CheckUpdatesButton_Click(object sender, RoutedEventArgs e)
+        {
+            CheckUpdatesButton.IsEnabled = false;
+            InstallUpdateButton.Visibility = Visibility.Collapsed;
+            _pendingUpdate = null;
+            UpdateStatusText.Text = "בודק עדכונים...";
+
+            try
+            {
+                var release = await UpdateChecker.GetLatestReleaseAsync();
+                var current = UpdateChecker.GetCurrentVersion();
+
+                if (release.ParsedVersion == null)
+                {
+                    UpdateStatusText.Text = $"לא ניתן לפרש את גרסת ה-Release ({release.TagName}).";
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(release.AssetUrl))
+                {
+                    UpdateStatusText.Text =
+                        $"גרסה {release.ParsedVersion} זמינה, אבל לא נמצא קובץ Setup ב-Release.";
+                    return;
+                }
+
+                if (UpdateChecker.IsNewer(current, release.ParsedVersion))
+                {
+                    var sizeMb = release.AssetSize / (1024.0 * 1024.0);
+                    UpdateStatusText.Text =
+                        $"זמינה גרסה חדשה: {release.ParsedVersion} (הנוכחית: {current}). " +
+                        $"קובץ ההתקנה: {release.AssetName} ({sizeMb:0.0} MB).";
+                    InstallUpdateButton.Visibility = Visibility.Visible;
+                    _pendingUpdate = release;
+                }
+                else
+                {
+                    UpdateStatusText.Text = $"אתה משתמש בגרסה העדכנית ביותר ({current}).";
+                }
+            }
+            catch (Exception ex)
+            {
+                UpdateStatusText.Text = $"שגיאה בבדיקת עדכונים: {ex.Message}";
+            }
+            finally
+            {
+                CheckUpdatesButton.IsEnabled = true;
+            }
+        }
+
+        private async void InstallUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_pendingUpdate == null) return;
+
+            // אישור לפני התקנה - התוכנה תיסגר במהלכה
+            var confirm = new ContentDialog
+            {
+                Title = "התקנת עדכון",
+                Content =
+                    $"גרסה {_pendingUpdate.ParsedVersion} תורד ותותקן. " +
+                    "התוכנה תיסגר אוטומטית לפני ההתקנה. להמשיך?",
+                PrimaryButtonText = "המשך",
+                CloseButtonText = "ביטול",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = RootGrid.XamlRoot,
+                FlowDirection = FlowDirection.RightToLeft
+            };
+            if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
+
+            CheckUpdatesButton.IsEnabled = false;
+            InstallUpdateButton.IsEnabled = false;
+            UpdateProgressBar.Visibility = Visibility.Visible;
+            UpdateProgressBar.Value = 0;
+            UpdateStatusText.Text = "מוריד את קובץ ההתקנה...";
+
+            try
+            {
+                var progress = new Progress<double>(p =>
+                {
+                    UpdateProgressBar.Value = p;
+                    UpdateStatusText.Text = $"מוריד... {p * 100:0}%";
+                });
+
+                var installerPath = await UpdateChecker.DownloadAssetAsync(
+                    _pendingUpdate.AssetUrl, progress);
+
+                UpdateStatusText.Text = "מפעיל את ההתקנה...";
+                UpdateChecker.RunInstaller(installerPath, SilentUpdateToggle.IsOn);
+
+                // יוצאים מהתוכנה - המתקין צריך להיות חופשי להחליף את הקבצים.
+                // ה-Watchdog לא ירים אותנו מחדש: המתקין יעצור אותו וירים בסיום (Inno Setup
+                // משתמש ב-Restart Manager). אם זה לא מצליח - המשתמש יפעיל מחדש בעצמו.
+                Application.Current.Exit();
+            }
+            catch (Exception ex)
+            {
+                UpdateStatusText.Text = $"שגיאה בהתקנת העדכון: {ex.Message}";
+                UpdateProgressBar.Visibility = Visibility.Collapsed;
+                CheckUpdatesButton.IsEnabled = true;
+                InstallUpdateButton.IsEnabled = true;
+            }
+        }
+
+        #endregion
+
         #region Buttons list management
 
         private async void AddButton_Click(object sender, RoutedEventArgs e)
