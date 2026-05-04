@@ -27,6 +27,10 @@ namespace Kolsites
         private static readonly (string Host, string Key)[] PreservedStorageEntries = new[]
         {
             ("shulchoni.abaye.co", "API_KEY"),
+            ("shulchoni.abaye.co", "deviceCustomSettings"),
+            ("shulchoni.abaye.co", "screensaverAdsDisabled"),
+            ("shulchoni.abaye.co", "lockScreenAdsDisabled"),
+            ("shulchoni.abaye.co", "posMode"),
         };
 
         private readonly AppSettings _settings;
@@ -377,7 +381,8 @@ namespace Kolsites
                     s.AreDefaultContextMenusEnabled = !_settings.BlockContextMenu;
                     s.AreDevToolsEnabled = false;
                     s.IsStatusBarEnabled = false;
-                    s.IsZoomControlEnabled = true;
+                    s.IsZoomControlEnabled = !_settings.DisablePinchZoom;
+                    s.IsPinchZoomEnabled = !_settings.DisablePinchZoom;
 
                     WebView.CoreWebView2.NewWindowRequested += (sender, e) =>
                     {
