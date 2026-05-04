@@ -28,6 +28,9 @@ namespace Kolsites
 
                 case AppMode.Kiosk:
                 default:
+                    // טעינת Kolsites במצב הקיוסק = מבטל את דגל ה'כיבוי ידני', כך שה-Watchdog
+                    // יחזור לפעולה אם התוכנה תיפול שוב מאוחר יותר.
+                    ManualStopFlag.Clear();
                     _mainWindow = new FloatingButtonWindow(settings);
                     break;
             }

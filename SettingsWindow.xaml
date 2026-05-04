@@ -305,7 +305,7 @@
                     <StackPanel Spacing="12" Padding="4,8">
                         <InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
                                  Title="הפעלה ועצירה"
-                                 Message="כפתור 'סגור' יסיים את כל המופעים של Kolsites במחשב (כולל הכפתור הצף וחלון העילי). ה-Watchdog ייתפעל אותם מחדש בעוד דקה אם הוא פעיל."/>
+                                 Message="כפתור 'סגור' יסיים את כל המופעים של Kolsites במחשב. סגירה ידנית מסמנת את התוכנה כ'מכובה במכוון', וה-Watchdog לא יפעיל אותה מחדש עד שתפעיל אותה בעצמך."/>
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button x:Name="StartKioskButton" Click="StartKioskButton_Click">
@@ -326,6 +326,30 @@
                         <TextBlock x:Name="ProcessStatusText"
                                    Style="{ThemeResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+
+                        <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="14,10"
+                                Margin="0,8,0,0">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="הפעלה אוטומטית מחדש (Watchdog)"
+                                           Style="{ThemeResource BodyStrongTextBlockStyle}"/>
+                                <ToggleSwitch x:Name="WatchdogToggle"
+                                              Header="צור משימה במתזמן המשימות של Windows שתבדוק אחת לשעה אם Kolsites פעיל - ותפעיל אותו אם נפל"
+                                              OnContent="פעיל - בדיקה אחת לשעה" OffContent="כבוי"
+                                              Toggled="WatchdogToggle_Toggled"/>
+                                <TextBlock x:Name="WatchdogStatusText"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock Text="יצירה/הסרה של משימה מתוזמנת דורשת הרשאות מנהל. אם הפעולה נכשלת - הפעל את חלון ההגדרות באמצעות 'הפעל כמנהל'."
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Expander>
 

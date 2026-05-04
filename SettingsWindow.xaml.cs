@@ -30,6 +30,9 @@ namespace Kolsites
 
         private readonly List<BlockedTimeRange> _blockedRanges = new();
 
+        // מצב המשימה המתוזמנת בעת פתיחת חלון ההגדרות. בעת שמירה משווים מול ה-Toggle ופועלים רק אם השתנה.
+        private bool _watchdogTaskInitiallyInstalled;
+
         public SettingsWindow(AppSettings settings)
         {
             InitializeComponent();
@@ -71,6 +74,7 @@ namespace Kolsites
 
             ApplyCurrentTheme();
             UpdateProcessStatus();
+            InitializeWatchdogToggle();
             PopulateAbout();
 
             Closed += (_, _) =>
@@ -768,6 +772,9 @@ namespace Kolsites
         {
             try
             {
+                // סימון כיבוי ידני - מונע מה-Watchdog להפעיל מחדש עד שהמשתמש יטען את Kolsites בעצמו.
+                ManualStopFlag.Set();
+
                 int killed = 0;
                 int currentPid = Process.GetCurrentProcess().Id;
                 var name = Path.GetFileNameWithoutExtension(
@@ -797,6 +804,76 @@ namespace Kolsites
             {
                 _ = ShowErrorAsync("נכשל בסגירה: " + ex.Message);
             }
+        }
+
+        private void InitializeWatchdogToggle()
+        {
+            _watchdogTaskInitiallyInstalled = TaskSchedulerHelper.IsTaskInstalled();
+            WatchdogToggle.IsOn = _watchdogTaskInitiallyInstalled;
+            UpdateWatchdogStatusText();
+        }
+
+        private void WatchdogToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            UpdateWatchdogStatusText();
+        }
+
+        private void UpdateWatchdogStatusText()
+        {
+            if (!_watchdogTaskInitiallyInstalled && !WatchdogToggle.IsOn)
+            {
+                WatchdogStatusText.Text = "אין כרגע משימה מתוזמנת.";
+            }
+            else if (_watchdogTaskInitiallyInstalled && WatchdogToggle.IsOn)
+            {
+                WatchdogStatusText.Text = $"המשימה '{TaskSchedulerHelper.TaskName}' קיימת. בעת השמירה תעודכן ללוח זמנים שעתי.";
+            }
+            else if (!_watchdogTaskInitiallyInstalled && WatchdogToggle.IsOn)
+            {
+                WatchdogStatusText.Text = $"בעת השמירה תיווצר משימה '{TaskSchedulerHelper.TaskName}' שתרוץ אחת לשעה.";
+            }
+            else
+            {
+                WatchdogStatusText.Text = $"בעת השמירה תוסר המשימה '{TaskSchedulerHelper.TaskName}'.";
+            }
+        }
+
+        /// <summary>
+        /// מיישם את שינוי מצב המשימה המתוזמנת בהתאם ל-Toggle. מחזיר false אם הייתה שגיאה
+        /// (וממלא error). מעדכן את _watchdogTaskInitiallyInstalled לאחר הצלחה.
+        /// </summary>
+        private bool ApplyWatchdogTaskChange(out string error)
+        {
+            error = "";
+            bool desired = WatchdogToggle.IsOn;
+            if (desired == _watchdogTaskInitiallyInstalled) return true;
+
+            if (desired)
+            {
+                var (ok, err) = TaskSchedulerHelper.InstallHourly();
+                if (!ok)
+                {
+                    error = "לא ניתן ליצור את משימת ה-Watchdog במתזמן המשימות.\n\n" +
+                            "נסה לפתוח את חלון ההגדרות כמנהל (לחיצה ימנית על קיצור ההגדרות > 'הפעל כמנהל').\n\n" +
+                            "פרטי שגיאה:\n" + err;
+                    return false;
+                }
+            }
+            else
+            {
+                var (ok, err) = TaskSchedulerHelper.Uninstall();
+                if (!ok)
+                {
+                    error = "לא ניתן להסיר את משימת ה-Watchdog ממתזמן המשימות.\n\n" +
+                            "נסה לפתוח את חלון ההגדרות כמנהל (לחיצה ימנית על קיצור ההגדרות > 'הפעל כמנהל').\n\n" +
+                            "פרטי שגיאה:\n" + err;
+                    return false;
+                }
+            }
+
+            _watchdogTaskInitiallyInstalled = desired;
+            UpdateWatchdogStatusText();
+            return true;
         }
 
         #endregion
@@ -838,6 +915,15 @@ namespace Kolsites
             _settings.BlockedTimeRanges = _blockedRanges.ToList();
 
             SettingsManager.Save(_settings);
+
+            // הפעלה/הסרה של המשימה המתוזמנת רק אם המצב השתנה. אם נכשל - מציג שגיאה אך
+            // לא מבטל את שמירת שאר ההגדרות שכבר נכתבו לדיסק.
+            if (!ApplyWatchdogTaskChange(out var watchdogError))
+            {
+                _ = ShowErrorAsync(watchdogError);
+                return; // משאיר את חלון ההגדרות פתוח כדי שהמשתמש יוכל לראות את השגיאה
+            }
+
             Close();
         }
 
