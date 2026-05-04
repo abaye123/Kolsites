@@ -238,11 +238,11 @@ namespace Kolsites
                 var v = typeof(SettingsWindow).Assembly.GetName().Version;
                 AboutVersionText.Text = v != null
                     ? $"גרסה {v.Major}.{v.Minor}.{v.Build}"
-                    : "גרסה 1.2.0";
+                    : "גרסה 1.3.0";
             }
             catch
             {
-                AboutVersionText.Text = "גרסה 1.2.0";
+                AboutVersionText.Text = "גרסה 1.3.0";
             }
 
             SettingsPathText.Text = $"קובץ הגדרות: {SettingsManager.GetSettingsPath()}";

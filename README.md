@@ -47,7 +47,7 @@
 
 ## 📥 התקנה
 
-1. הורד את `Kolsites-Setup-1.2.0.exe` מ-[דף ה-Releases](https://github.com/abaye123/Kolsites/releases)
+1. הורד את `Kolsites-Setup-1.3.0.exe` מ-[דף ה-Releases](https://github.com/abaye123/Kolsites/releases)
 2. הרץ את המתקין (דורש הרשאות אדמין — מתקין לכל המשתמשים במחשב)
 3. בזמן ההתקנה אפשר לבחור:
    - קיצור דרך לכפתור הצף על שולחן העבודה
@@ -119,7 +119,7 @@ cd Installer
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" Kolsites.iss
 ```
 
-הפלט: `Release\Kolsites-Setup-1.2.0.exe`
+הפלט: `Release\Kolsites-Setup-1.3.0.exe`
 
 ## 📁 מבנה הפרויקט
 
