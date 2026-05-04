@@ -8,7 +8,7 @@
 ; ============================================================================
 
 #define AppName "Kolsites"
-#define AppVersion "1.3.0"
+#define AppVersion "1.4.0"
 #define AppPublisher "abaye"
 #define AppExeName "Kolsites.exe"
 
