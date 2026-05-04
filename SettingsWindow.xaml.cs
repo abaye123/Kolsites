@@ -1035,7 +1035,67 @@ namespace Kolsites
                 return; // משאיר את חלון ההגדרות פתוח כדי שהמשתמש יוכל לראות את השגיאה
             }
 
+            // הפעלה מחדש של החלון העילי כדי שיטען את ההגדרות החדשות.
+            // FloatingButtonWindow מקבל snapshot של ההגדרות בקונסטרקטור ולא מנטר את הקובץ,
+            // לכן הדרך היחידה להחיל את השינויים על המופע הרץ היא להפעיל מחדש.
+            RestartKioskIfRunning();
+
             Close();
+        }
+
+        /// <summary>
+        /// אם מופע Kiosk רץ - סוגר אותו ומפעיל חדש כדי שייטען עם ההגדרות החדשות.
+        /// אם לא רץ - לא עושה כלום (לא מפעיל מופע חדש שלא היה קיים).
+        /// </summary>
+        private void RestartKioskIfRunning()
+        {
+            const string KioskMutexName = "Kolsites_Kiosk_{8F3A2C7E-4B5D-4F1A-9C8E-3D2B1A5F6E7D}";
+
+            bool kioskRunning;
+            try
+            {
+                using var m = new Mutex(false, KioskMutexName, out _);
+                kioskRunning = !m.WaitOne(TimeSpan.Zero);
+                if (!kioskRunning) m.ReleaseMutex();
+            }
+            catch
+            {
+                kioskRunning = false;
+            }
+
+            if (!kioskRunning) return;
+
+            try
+            {
+                int currentPid = Process.GetCurrentProcess().Id;
+                var exe = Process.GetCurrentProcess().MainModule?.FileName;
+                if (string.IsNullOrEmpty(exe)) return;
+
+                var name = Path.GetFileNameWithoutExtension(exe);
+
+                foreach (var p in Process.GetProcessesByName(name))
+                {
+                    if (p.Id == currentPid) continue;
+                    try { p.Kill(entireProcessTree: false); }
+                    catch { }
+                    try { p.WaitForExit(2000); }
+                    catch { }
+                }
+
+                // המתנה קצרה לשחרור ה-Mutex לפני הרצת מופע חדש
+                Thread.Sleep(200);
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = exe!,
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(exe) ?? ""
+                });
+            }
+            catch (Exception ex)
+            {
+                _ = ShowErrorAsync("ההגדרות נשמרו, אך הפעלה מחדש של החלון העילי נכשלה: " + ex.Message);
+            }
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e) => Close();
