@@ -229,6 +229,15 @@
                         <ToggleSwitch x:Name="BlockContextMenuToggle"
                                       Header="חסום תפריט הקשר ימני בדפדפן"
                                       OnContent="כן" OffContent="לא"/>
+                        <StackPanel Spacing="2">
+                            <ToggleSwitch x:Name="DisablePinchZoomToggle"
+                                          Header="השבת זום באמצעות צביטה במסך מגע"
+                                          OnContent="מושבת" OffContent="מופעל"/>
+                            <TextBlock Text="שימושי בעמדות עם מסכי מגע רגישים שבהן משתמשים גורמים לזום בטעות. כשמופעל - גם Ctrl+גלגלת לא יוכל לשנות זום."
+                                       Style="{ThemeResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
                         <ToggleSwitch x:Name="ClearCacheOnCloseToggle"
                                       Header="נקה cache בעת סגירת החלון העילי"
                                       OnContent="כן" OffContent="לא"/>

@@ -60,6 +60,7 @@ namespace Kolsites
             ShowKeyboardToggle.IsOn = _settings.ShowVirtualKeyboard;
             AutoShowKeyboardOnFocusToggle.IsOn = _settings.AutoShowKeyboardOnFocus;
             BlockContextMenuToggle.IsOn = _settings.BlockContextMenu;
+            DisablePinchZoomToggle.IsOn = _settings.DisablePinchZoom;
             ClearCacheOnCloseToggle.IsOn = _settings.ClearCacheOnClose;
             ShowNoInternetOverlayToggle.IsOn = _settings.ShowNoInternetOverlay;
 
@@ -896,6 +897,7 @@ namespace Kolsites
             _settings.DefaultKeyboardLayout = GetTag(KeyboardLayoutCombo) ?? "he";
             _settings.KeyboardScale = ParseKeyboardScale(GetTag(KeyboardScaleCombo));
             _settings.BlockContextMenu = BlockContextMenuToggle.IsOn;
+            _settings.DisablePinchZoom = DisablePinchZoomToggle.IsOn;
             _settings.ClearCacheOnClose = ClearCacheOnCloseToggle.IsOn;
             _settings.ShowNoInternetOverlay = ShowNoInternetOverlayToggle.IsOn;
 

@@ -130,6 +130,12 @@ namespace Kolsites
         /// <summary>האם לחסום תפריט הקשר ימני בדף האינטרנט</summary>
         public bool BlockContextMenu { get; set; } = true;
 
+        /// <summary>
+        /// האם להשבית זום באמצעות צביטה במסך מגע. שימושי בעמדות עם מסכים בעלי רגישות גבוהה,
+        /// שבהן משתמשים מתקשים לבטל זום שנעשה בטעות. כשמופעל - גם Ctrl+גלגלת מנוטרל.
+        /// </summary>
+        public bool DisablePinchZoom { get; set; } = false;
+
         /// <summary>זמן ניקוי cache אוטומטי בעת סגירת הדפדפן (true תמיד)</summary>
         public bool ClearCacheOnClose { get; set; } = true;
 
