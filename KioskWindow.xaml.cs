@@ -572,6 +572,15 @@ namespace Kolsites
             WebView.Visibility = Visibility.Visible;
             StatusText.Text = btn.Name;
 
+            if (WebView.CoreWebView2 == null)
+            {
+                // _webViewReady=true אבל CoreWebView2 ריק - בדרך כלל סימן ש-WebView2 Runtime
+                // של מיקרוסופט חסר או פגום. בלי הבדיקה הזו Navigate היה זורק NullReferenceException
+                // עם הודעה גנרית ("Object reference not set...") שלא מסבירה את הסיבה.
+                StatusText.Text = "WebView2 Runtime חסר או פגום - יש להתקין את Microsoft Edge WebView2 Runtime";
+                return;
+            }
+
             try
             {
                 WebView.CoreWebView2.Navigate(_currentUrl);
