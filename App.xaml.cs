@@ -31,11 +31,29 @@ namespace Kolsites
                     // טעינת Kolsites במצב הקיוסק = מבטל את דגל ה'כיבוי ידני', כך שה-Watchdog
                     // יחזור לפעולה אם התוכנה תיפול שוב מאוחר יותר.
                     ManualStopFlag.Clear();
-                    _mainWindow = new FloatingButtonWindow(settings);
+
+                    // מצב "ללא כפתור צף": פתיחה ישירה של חלון הקיוסק, וסגירה ב-X מסיימת את התהליך.
+                    // ה-Watchdog מנוטרל ע"י ManualStopFlag שמוצב בסגירה.
+                    if (settings.SkipFloatingButton || Program.ForceNoFloatingButton)
+                    {
+                        _mainWindow = new KioskWindow(settings, OnDirectKioskClosed, directMode: true);
+                    }
+                    else
+                    {
+                        _mainWindow = new FloatingButtonWindow(settings);
+                    }
                     break;
             }
 
             _mainWindow.Activate();
+        }
+
+        private void OnDirectKioskClosed()
+        {
+            // במצב "ללא כפתור צף" סגירת חלון הקיוסק = יציאה מהתוכנה. מציבים ManualStopFlag
+            // כדי שה-Watchdog לא יקפיץ מופע חדש בעוד 30ש'.
+            ManualStopFlag.Set();
+            Exit();
         }
 
         private static void TryLogError(Exception ex)

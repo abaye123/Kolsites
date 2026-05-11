@@ -57,6 +57,20 @@
                     </StackPanel>
                 </Expander>
 
+                <!-- מצב חלון רגיל - ללא כפתור צף -->
+                <Expander Header="מצב חלון רגיל (ללא כפתור צף)" IsExpanded="False"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel Spacing="8" Padding="4,8">
+                        <ToggleSwitch x:Name="SkipFloatingButtonToggle"
+                                      Header="פתח את החלון העילי ישירות (ללא כפתור צף)"
+                                      OnContent="פעיל" OffContent="כבוי"/>
+                        <TextBlock Text="כשמופעל: הפעלת התוכנה פותחת ישר את חלון הדפדפן עם title bar רגיל ו-X של מערכת, וסגירה ב-X מסיימת את התהליך. במצב הזה החלון לא תמיד-למעלה, אין מסך מלא, ואין סגירה אוטומטית לאחר חוסר פעילות. ה-Watchdog לא יקפיץ מופע חדש כי בסגירה מוצב דגל 'כיבוי ידני'."
+                                   Style="{ThemeResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Expander>
+
                 <!-- מיקום הכפתור הצף -->
                 <Expander Header="מיקום הכפתור הצף" IsExpanded="True"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">

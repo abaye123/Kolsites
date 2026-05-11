@@ -156,6 +156,13 @@ namespace Kolsites
         /// יוצג חלון "התוכנה לא פעילה כרגע" עם מונה דקות עד לסיום הטווח.
         /// </summary>
         public List<BlockedTimeRange> BlockedTimeRanges { get; set; } = new();
+
+        /// <summary>
+        /// מצב "ללא כפתור צף": הפעלת התוכנה תפתח ישר את חלון הקיוסק (עם title bar רגיל ו-X),
+        /// וסגירת החלון ב-X תסיים את התהליך. במצב הזה: אין כפתור צף, אין always-on-top, אין מסך
+        /// מלא, אין טיימר חוסר-פעילות, ובסגירה מוצב ManualStopFlag כדי שה-Watchdog לא יפעיל מחדש.
+        /// </summary>
+        public bool SkipFloatingButton { get; set; } = false;
     }
 
     /// <summary>

@@ -12,11 +12,18 @@ namespace Kolsites
         // חייב להתאים לגרסת ה-NuGet Microsoft.WindowsAppSDK ב-csproj (1.7)
         private static readonly uint RequiredMajorMinor = 0x00010007;
 
+        // ארגומנט CLI שמכריח את מצב הקיוסק לרוץ ללא כפתור צף (עוקף את ההגדרה).
+        // שמור גלובלית כדי ש-App יוכל לקרוא אותו בלי לקבל פרמטר נוסף.
+        public static bool ForceNoFloatingButton { get; private set; }
+
         [STAThread]
         public static int Main(string[] args)
         {
             // קביעת מצב ההפעלה לפי ארגומנט ראשון
             var mode = ParseMode(args);
+            ForceNoFloatingButton = args.Any(a =>
+                a.Equals("--no-floating-button", StringComparison.OrdinalIgnoreCase)
+                || a.Equals("--direct-kiosk", StringComparison.OrdinalIgnoreCase));
 
             // מצב Watchdog רץ ללא XAML/UI - תהליך עצמאי קליל
             if (mode == AppMode.Watchdog)

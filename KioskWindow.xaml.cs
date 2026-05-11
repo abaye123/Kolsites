@@ -37,6 +37,9 @@ namespace Kolsites
         private Dictionary<string, string> _preservedStorageValues = new();
         private string? _preserveStorageScriptId;
         private readonly Action _onClosed;
+        // מצב "ללא כפתור צף": חלון רגיל עם title bar ו-X, ללא always-on-top, ללא טיימר חוסר-פעילות.
+        // סגירה ב-X מסיימת את התהליך (האחריות על Exit היא של _onClosed).
+        private readonly bool _directMode;
         private readonly DispatcherQueueTimer _topmostTimer;
         private readonly DispatcherQueueTimer _internetTimer;
         private readonly DispatcherQueueTimer _inactivityTimer;
@@ -48,11 +51,12 @@ namespace Kolsites
         // נקבע ב-NavigateAsync לפי כתובת הכפתור, ומאופס בלחצן הבית.
         private string? _expectedHost;
 
-        public KioskWindow(AppSettings settings, Action onClosed)
+        public KioskWindow(AppSettings settings, Action onClosed, bool directMode = false)
         {
             InitializeComponent();
             _settings = settings;
             _onClosed = onClosed;
+            _directMode = directMode;
 
             Title = "Kolsites - עילי";
             RootGrid.FlowDirection = FlowDirection.RightToLeft;
@@ -64,12 +68,13 @@ namespace Kolsites
             BuildSiteButtons();
             HookKeyboard();
 
-            // Topmost timer - שומר את החלון מקדימה למעלה (מחקה את Timer1 בתוכנה הישנה)
+            // Topmost timer - שומר את החלון מקדימה למעלה (מחקה את Timer1 בתוכנה הישנה).
+            // ב-directMode זה לא רלוונטי - חלון רגיל בשליטת המשתמש.
             var dispatcher = DispatcherQueue.GetForCurrentThread();
             _topmostTimer = dispatcher.CreateTimer();
             _topmostTimer.Interval = TimeSpan.FromSeconds(2);
             _topmostTimer.Tick += (_, _) => EnsureTopmost();
-            _topmostTimer.Start();
+            if (!_directMode) _topmostTimer.Start();
 
             // Internet timer
             _internetTimer = dispatcher.CreateTimer();
@@ -80,10 +85,11 @@ namespace Kolsites
             // Inactivity timer - חזרה אוטומטית לכפתור הצף לאחר 45 שניות ללא קלט מהמשתמש.
             // משתמשים ב-GetLastInputInfo (Win32) שמחזיר את הזמן האחרון שהמערכת קיבלה קלט (עכבר/מגע/מקלדת) -
             // עובד גם עבור אינטראקציה בתוך WebView2, מה ש-WinUI events לא יחזיקו לבד.
+            // ב-directMode הסגירה היא יציאה מהתוכנה - לא רוצים שזה יקרה אחרי 45ש' של חוסר פעילות.
             _inactivityTimer = dispatcher.CreateTimer();
             _inactivityTimer.Interval = TimeSpan.FromSeconds(3);
             _inactivityTimer.Tick += (_, _) => CheckInactivity();
-            _inactivityTimer.Start();
+            if (!_directMode) _inactivityTimer.Start();
 
             // Site-scripts timer - מריץ את הסקריפטים של האתר הנוכחי כל שנייה.
             // זה מחקה את ה-TimerDirshu/TimerYak וכו' של התוכנה הישנה, שהסירו אלמנטים מסויימים מהדף
@@ -103,17 +109,34 @@ namespace Kolsites
         private void ConfigureWindow()
         {
             WindowHelper.SetIcon(this);
+
+            var appWindow = WindowHelper.GetAppWindow(this);
+
+            if (_directMode)
+            {
+                // חלון רגיל עם title bar ו-X של מערכת, גלוי ב-taskbar, ניתן להזזה/לשינוי גודל.
+                // אין כפתור צף לחזור אליו - הסגירה ב-X מסיימת את התהליך.
+                if (appWindow?.Presenter is OverlappedPresenter op)
+                {
+                    op.SetBorderAndTitleBar(true, true);
+                    op.IsAlwaysOnTop = false;
+                    op.IsResizable = true;
+                    op.IsMaximizable = true;
+                    op.IsMinimizable = true;
+                }
+                return;
+            }
+
             WindowHelper.HideFromTaskbar(this);
 
             // חלון מסך מלא ללא מסגרת + תמיד למעלה
-            var appWindow = WindowHelper.GetAppWindow(this);
-            if (appWindow?.Presenter is OverlappedPresenter op)
+            if (appWindow?.Presenter is OverlappedPresenter op2)
             {
-                op.SetBorderAndTitleBar(false, false);
-                op.IsAlwaysOnTop = true;
-                op.IsResizable = false;
-                op.IsMaximizable = false;
-                op.IsMinimizable = false;
+                op2.SetBorderAndTitleBar(false, false);
+                op2.IsAlwaysOnTop = true;
+                op2.IsResizable = false;
+                op2.IsMaximizable = false;
+                op2.IsMinimizable = false;
             }
 
             // התאמת גודל ומיקום למסך המלא
@@ -129,6 +152,8 @@ namespace Kolsites
 
         private void EnsureTopmost()
         {
+            // ב-directMode החלון לא topmost במכוון - לא מציבים שוב.
+            if (_directMode) return;
             try
             {
                 var appWindow = WindowHelper.GetAppWindow(this);

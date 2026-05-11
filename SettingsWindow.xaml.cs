@@ -63,6 +63,7 @@ namespace Kolsites
             DisablePinchZoomToggle.IsOn = _settings.DisablePinchZoom;
             ClearCacheOnCloseToggle.IsOn = _settings.ClearCacheOnClose;
             ShowNoInternetOverlayToggle.IsOn = _settings.ShowNoInternetOverlay;
+            SkipFloatingButtonToggle.IsOn = _settings.SkipFloatingButton;
 
             // לא טוענים את ה-hash לתוך הטופס - משאירים את השדה ריק ומציגים סטטוס.
             _originalKioskPasswordHash = _settings.KioskSettingsPassword ?? "";
@@ -1009,6 +1010,7 @@ namespace Kolsites
             _settings.DisablePinchZoom = DisablePinchZoomToggle.IsOn;
             _settings.ClearCacheOnClose = ClearCacheOnCloseToggle.IsOn;
             _settings.ShowNoInternetOverlay = ShowNoInternetOverlayToggle.IsOn;
+            _settings.SkipFloatingButton = SkipFloatingButtonToggle.IsOn;
 
             // לוגיקת סיסמת הקיוסק:
             // 1) אם 'הסר סיסמה' נלחץ - שומרים ריק.
