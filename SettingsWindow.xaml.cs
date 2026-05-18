@@ -396,7 +396,9 @@ namespace Kolsites
                 IconPath = selected.IconPath,
                 Label = selected.Label,
                 BackgroundColor = selected.BackgroundColor,
-                Enabled = selected.Enabled
+                Enabled = selected.Enabled,
+                RestrictToPath = selected.RestrictToPath,
+                Scripts = selected.Scripts // שמירת הסקריפטים שנערכים בנפרד דרך ScriptsButton
             };
 
             var dialog = CreateEditDialog(copy);
@@ -747,6 +749,22 @@ namespace Kolsites
             var iconPathBox = new TextBox { Header = "נתיב לאייקון מותאם (אופציונלי)", Text = btn.IconPath, PlaceholderText = "השאר ריק לאייקון ברירת מחדל" };
             var colorBox = new TextBox { Header = "צבע רקע HEX", Text = btn.BackgroundColor, PlaceholderText = "#0078D4" };
             var enabledToggle = new ToggleSwitch { Header = "מופעל", IsOn = btn.Enabled, OnContent = "כן", OffContent = "לא" };
+            var restrictToPathToggle = new ToggleSwitch
+            {
+                Header = "הגבל ניווט לנתיב של ה-URL",
+                IsOn = btn.RestrictToPath,
+                OnContent = "כן",
+                OffContent = "לא"
+            };
+            var restrictHint = new TextBlock
+            {
+                Text = "כשמופעל - חסום ניווט לעמודים אחרים באתר שאינם תחת אותו נתיב. " +
+                       "לדוגמה: URL https://ladaat.co/gilyonot/ → /gilyonot/* מותר, /?cat=38 ייחסם. " +
+                       "כמו כן תת-דומיינים נחסמים.",
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                TextWrapping = TextWrapping.Wrap
+            };
 
             var pickButton = new Button { Content = "בחר אייקון..." };
             pickButton.Click += async (_, _) =>
@@ -779,6 +797,8 @@ namespace Kolsites
             panel.Children.Add(iconRow);
             panel.Children.Add(colorBox);
             panel.Children.Add(enabledToggle);
+            panel.Children.Add(restrictToPathToggle);
+            panel.Children.Add(restrictHint);
 
             var dialog = new ContentDialog
             {
@@ -799,6 +819,7 @@ namespace Kolsites
                 btn.IconPath = iconPathBox.Text?.Trim() ?? "";
                 btn.BackgroundColor = colorBox.Text?.Trim() ?? "";
                 btn.Enabled = enabledToggle.IsOn;
+                btn.RestrictToPath = restrictToPathToggle.IsOn;
 
                 if (string.IsNullOrEmpty(btn.Url) || (!btn.Url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
                                                        !btn.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&

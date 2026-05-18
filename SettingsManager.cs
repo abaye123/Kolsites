@@ -58,6 +58,14 @@ namespace Kolsites
         public bool Enabled { get; set; } = true;
 
         /// <summary>
+        /// הקשחת ניווט: כשמופעל, מותר לנווט רק לכתובות שמתחת לנתיב של ה-URL של הכפתור
+        /// (לדוגמה: URL "https://ladaat.co/gilyonot/" -> מותר רק /gilyonot/*, וייחסמו /, /?cat=38 וכד').
+        /// בנוסף, נחסמים תת-דומיינים (sub.ladaat.co לא יתאפשר) - מצב "דומיין מדויק" כדי שלא תהיה
+        /// עקיפה דרך מארח אחר תחת אותו דומיין-על.
+        /// </summary>
+        public bool RestrictToPath { get; set; } = false;
+
+        /// <summary>
         /// סקריפטים שירוצו על האתר (כמו TimerDirshu/TimerYak במקור) -
         /// מסירים אלמנטים מסויימים, מסתירים פרסומות, וכו'.
         /// רצים כל שנייה בזמן שהאתר טעון.

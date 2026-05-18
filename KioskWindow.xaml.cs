@@ -50,6 +50,10 @@ namespace Kolsites
         // ההוסט (לאחר נרמול) של האתר הנוכחי - משמש לחסימת ניווט עליון לאתרים אחרים.
         // נקבע ב-NavigateAsync לפי כתובת הכפתור, ומאופס בלחצן הבית.
         private string? _expectedHost;
+        // קידומת נתיב נדרשת (לדוגמה "/gilyonot") - מאוכלסת רק כשהכפתור הנוכחי מוגדר עם
+        // RestrictToPath=true. כשהיא לא null, הניווט מוגבל לאותו נתיב + לא מתירים תת-דומיינים.
+        // הנרמול: בלי trailing slash; השוואה היא target==prefix או target.StartsWith(prefix+"/").
+        private string? _expectedPathPrefix;
 
         public KioskWindow(AppSettings settings, Action onClosed, bool directMode = false)
         {
@@ -592,6 +596,7 @@ namespace Kolsites
             _currentButton = btn;
             _currentUrl = AppendCacheBuster(btn.Url);
             _expectedHost = TryGetHost(btn.Url);
+            _expectedPathPrefix = btn.RestrictToPath ? TryGetPathPrefix(btn.Url) : null;
 
             WelcomePanel.Visibility = Visibility.Collapsed;
             WebView.Visibility = Visibility.Visible;
@@ -668,10 +673,44 @@ namespace Kolsites
             // סכמות לא-http (about:blank, data:, javascript:) - לא חוסמים, לא ניווט לאתר חיצוני.
             if (targetHost == null) return false;
 
-            // התאמה: אותו הוסט בדיוק או תת-דומיין שלו (sub.example.com מקובל אם הכפתור הוא example.com).
-            if (targetHost == _expectedHost) return false;
-            if (targetHost.EndsWith("." + _expectedHost, StringComparison.Ordinal)) return false;
-            return true;
+            // התאמת הוסט: בכפתור עם RestrictToPath נדרש דומיין מדויק (לא תת-דומיין) -
+            // אחרת אפשר היה לעקוף את ההגבלה דרך sub.same-domain. בכפתור רגיל, תת-דומיין מקובל.
+            bool hostMatches = targetHost == _expectedHost
+                || (_expectedPathPrefix == null
+                    && targetHost.EndsWith("." + _expectedHost, StringComparison.Ordinal));
+            if (!hostMatches) return true;
+
+            // כשמופעלת הגבלת נתיב - בודקים שהנתיב של היעד נמצא תחת ה-prefix שנגזר מ-URL הכפתור.
+            if (_expectedPathPrefix != null && !PathMatchesPrefix(targetUri, _expectedPathPrefix))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// מחזיר את נתיב ה-URL כקידומת מנורמלת (ללא trailing slash, lowercase). מחזיר null
+        /// אם ה-URL לא תקין או אם הנתיב הוא שורש בלבד ("/" או ריק) - שכן הגבלה לשורש זה
+        /// לא הגבלה כלל ועדיף לדלג בלי להריץ את הבדיקה.
+        /// </summary>
+        private static string? TryGetPathPrefix(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return null;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+            var path = uri.AbsolutePath ?? "/";
+            // נרמול: מסירים trailing slash חוץ מהמקרה של "/" עצמו
+            path = path.TrimEnd('/');
+            if (string.IsNullOrEmpty(path)) return null;
+            return path.ToLowerInvariant();
+        }
+
+        private static bool PathMatchesPrefix(string targetUri, string prefix)
+        {
+            if (!Uri.TryCreate(targetUri, UriKind.Absolute, out var uri)) return false;
+            var targetPath = (uri.AbsolutePath ?? "/").TrimEnd('/').ToLowerInvariant();
+            if (targetPath.Length == 0) return false;
+            if (targetPath == prefix) return true;
+            // התאמת תת-נתיב: prefix="/gilyonot" מקבל "/gilyonot/page", דוחה "/gilyonot2".
+            return targetPath.StartsWith(prefix + "/", StringComparison.Ordinal);
         }
 
         private static string? TryGetHost(string url)
@@ -889,6 +928,7 @@ namespace Kolsites
             _currentButton = null;
             _currentUrl = null;
             _expectedHost = null;
+            _expectedPathPrefix = null;
             _siteScriptsTimer.Stop();
             WebView.Visibility = Visibility.Collapsed;
             WelcomePanel.Visibility = Visibility.Visible;
