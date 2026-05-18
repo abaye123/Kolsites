@@ -11,7 +11,7 @@ namespace Kolsites
 {
     /// <summary>
     /// בודק האם קיים עדכון ב-GitHub Releases ומפעיל את ה-Setup. מצפה לפורמט:
-    /// tag = "v1.5.0", asset = "Kolsites-Setup-1.5.0.exe" (Inno Setup), כי כך בנוי
+    /// tag = "v1.6.0", asset = "Kolsites-Setup-1.6.0.exe" (Inno Setup), כי כך בנוי
     /// סקריפט ההתקנה Installer\Kolsites.iss.
     /// </summary>
     public static class UpdateChecker

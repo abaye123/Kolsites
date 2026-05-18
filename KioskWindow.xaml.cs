@@ -966,7 +966,7 @@ namespace Kolsites
         private async System.Threading.Tasks.Task ShowAboutDialogAsync()
         {
             // בניית תוכן ה-About ב-code (זהה ל-About שבהגדרות, ללא לינקי גיטהאב)
-            var version = "1.5.0";
+            var version = "1.6.0";
             try
             {
                 var v = typeof(KioskWindow).Assembly.GetName().Version;
