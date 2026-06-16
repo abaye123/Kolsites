@@ -41,7 +41,16 @@ namespace Kolsites
             ".,?!'"
         };
 
-        private enum Layout { Hebrew, EnglishLower, EnglishUpper, Numbers }
+        // פריסת מקשי טלפון: 3x3 ספרות + 0 מתחת. שימושי לעמדות שבהן הקלט הוא מספרי טלפון/קוד.
+        private static readonly string[] NumberPadRows = new[]
+        {
+            "123",
+            "456",
+            "789",
+            "0"
+        };
+
+        private enum Layout { Hebrew, EnglishLower, EnglishUpper, Numbers, NumberPad }
         private Layout _currentLayout = Layout.Hebrew;
 
         // מכפיל גודל - משפיע על MinWidth/MinHeight/FontSize/Margin של כל המקשים.
@@ -61,6 +70,7 @@ namespace Kolsites
             {
                 "en" => Layout.EnglishLower,
                 "num" => Layout.Numbers,
+                "numpad" => Layout.NumberPad,
                 _ => Layout.Hebrew
             };
             Build();
@@ -79,22 +89,31 @@ namespace Kolsites
         {
             KeyboardRoot.Children.Clear();
 
-            string[] rows = _currentLayout switch
+            if (_currentLayout == Layout.NumberPad)
             {
-                Layout.Hebrew => HebrewRows,
-                Layout.EnglishUpper => EnglishUpperRows,
-                Layout.Numbers => NumberRows,
-                _ => EnglishLowerRows
-            };
+                // פריסת דיאלפד - מקשים רחבים יותר כי יש רק 3 בשורה.
+                foreach (var row in NumberPadRows)
+                    KeyboardRoot.Children.Add(BuildKeyRow(row, keyWidth: 100));
+            }
+            else
+            {
+                string[] rows = _currentLayout switch
+                {
+                    Layout.Hebrew => HebrewRows,
+                    Layout.EnglishUpper => EnglishUpperRows,
+                    Layout.Numbers => NumberRows,
+                    _ => EnglishLowerRows
+                };
 
-            foreach (var row in rows)
-                KeyboardRoot.Children.Add(BuildKeyRow(row));
+                foreach (var row in rows)
+                    KeyboardRoot.Children.Add(BuildKeyRow(row));
+            }
 
             // שורה תחתונה - מתגי פריסות + רווח + Backspace + Enter
             KeyboardRoot.Children.Add(BuildBottomRow());
         }
 
-        private StackPanel BuildKeyRow(string row)
+        private StackPanel BuildKeyRow(string row, double keyWidth = 58)
         {
             var sp = new StackPanel
             {
@@ -104,7 +123,7 @@ namespace Kolsites
 
             foreach (var ch in row)
             {
-                sp.Children.Add(MakeKey(ch.ToString()));
+                sp.Children.Add(MakeKey(ch.ToString(), widthOverride: keyWidth));
             }
 
             return sp;
@@ -124,13 +143,18 @@ namespace Kolsites
                 _currentLayout == Layout.EnglishUpper ? Layout.EnglishLower : Layout.EnglishUpper,
                 isActive: _currentLayout == Layout.EnglishLower || _currentLayout == Layout.EnglishUpper));
             sp.Children.Add(MakeLayoutToggle("123", Layout.Numbers));
+            // פריסת מקשי טלפון: ספרות בלבד בסידור 3x3+0 - גלוי כמתג בכל הפריסות.
+            sp.Children.Add(MakeLayoutToggle("☎", Layout.NumberPad));
 
-            // רווח
-            var space = MakeKey(" ", "רווח");
-            space.Style = (Style)Resources["WideKeyButtonStyle"];
-            space.MinWidth = 250 * _scale;
-            ApplyKeyScale(space);
-            sp.Children.Add(space);
+            // רווח - בפריסת דיאלפד אין משמעות לרווח, אז מדלגים עליו
+            if (_currentLayout != Layout.NumberPad)
+            {
+                var space = MakeKey(" ", "רווח");
+                space.Style = (Style)Resources["WideKeyButtonStyle"];
+                space.MinWidth = 250 * _scale;
+                ApplyKeyScale(space);
+                sp.Children.Add(space);
+            }
 
             // Backspace
             var back = new Button
@@ -157,12 +181,12 @@ namespace Kolsites
             return sp;
         }
 
-        private Button MakeKey(string text, string? toolTip = null)
+        private Button MakeKey(string text, string? toolTip = null, double widthOverride = 58)
         {
             var btn = new Button
             {
                 Style = (Style)Resources["KeyButtonStyle"],
-                MinWidth = 58 * _scale,
+                MinWidth = widthOverride * _scale,
                 Content = text == " " ? "רווח" : text
             };
             ApplyKeyScale(btn);

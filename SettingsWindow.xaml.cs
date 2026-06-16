@@ -398,6 +398,7 @@ namespace Kolsites
                 BackgroundColor = selected.BackgroundColor,
                 Enabled = selected.Enabled,
                 RestrictToPath = selected.RestrictToPath,
+                KeyboardLayout = selected.KeyboardLayout,
                 Scripts = selected.Scripts // שמירת הסקריפטים שנערכים בנפרד דרך ScriptsButton
             };
 
@@ -766,6 +767,31 @@ namespace Kolsites
                 TextWrapping = TextWrapping.Wrap
             };
 
+            // דריסת פריסת המקלדת - "" = ברירת מחדל מההגדרות הכלליות.
+            var keyboardLayoutCombo = new ComboBox
+            {
+                Header = "פריסת מקלדת באתר הזה",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                MinWidth = 240
+            };
+            keyboardLayoutCombo.Items.Add(new ComboBoxItem { Tag = "", Content = "ברירת מחדל מההגדרות הכלליות" });
+            keyboardLayoutCombo.Items.Add(new ComboBoxItem { Tag = "he", Content = "עברית" });
+            keyboardLayoutCombo.Items.Add(new ComboBoxItem { Tag = "en", Content = "אנגלית" });
+            keyboardLayoutCombo.Items.Add(new ComboBoxItem { Tag = "num", Content = "מספרים (שורה)" });
+            keyboardLayoutCombo.Items.Add(new ComboBoxItem { Tag = "numpad", Content = "מקשי טלפון (3x3)" });
+            // בחירת הערך הקיים. אם לא נמצא או ריק - אופציית "ברירת מחדל".
+            var existingLayout = (btn.KeyboardLayout ?? "").ToLowerInvariant();
+            int selectedLayoutIdx = 0;
+            for (int i = 0; i < keyboardLayoutCombo.Items.Count; i++)
+            {
+                if (keyboardLayoutCombo.Items[i] is ComboBoxItem ci && (ci.Tag as string ?? "") == existingLayout)
+                {
+                    selectedLayoutIdx = i;
+                    break;
+                }
+            }
+            keyboardLayoutCombo.SelectedIndex = selectedLayoutIdx;
+
             var pickButton = new Button { Content = "בחר אייקון..." };
             pickButton.Click += async (_, _) =>
             {
@@ -799,6 +825,7 @@ namespace Kolsites
             panel.Children.Add(enabledToggle);
             panel.Children.Add(restrictToPathToggle);
             panel.Children.Add(restrictHint);
+            panel.Children.Add(keyboardLayoutCombo);
 
             var dialog = new ContentDialog
             {
@@ -820,6 +847,7 @@ namespace Kolsites
                 btn.BackgroundColor = colorBox.Text?.Trim() ?? "";
                 btn.Enabled = enabledToggle.IsOn;
                 btn.RestrictToPath = restrictToPathToggle.IsOn;
+                btn.KeyboardLayout = (keyboardLayoutCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "";
 
                 if (string.IsNullOrEmpty(btn.Url) || (!btn.Url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
                                                        !btn.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&

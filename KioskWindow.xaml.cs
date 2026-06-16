@@ -598,6 +598,16 @@ namespace Kolsites
             _expectedHost = TryGetHost(btn.Url);
             _expectedPathPrefix = btn.RestrictToPath ? TryGetPathPrefix(btn.Url) : null;
 
+            // אם הכפתור מגדיר פריסת מקלדת ייעודית - מחילים אותה (לדוגמה דיאלפד באתרי חיוג).
+            // אחרת חוזרים לברירת המחדל הגלובלית. תקף רק אם המקלדת מופעלת בכלל.
+            if (_settings.ShowVirtualKeyboard)
+            {
+                var layout = !string.IsNullOrWhiteSpace(btn.KeyboardLayout)
+                    ? btn.KeyboardLayout
+                    : _settings.DefaultKeyboardLayout;
+                Keyboard.SetInitialLayout(layout);
+            }
+
             WelcomePanel.Visibility = Visibility.Collapsed;
             WebView.Visibility = Visibility.Visible;
             StatusText.Text = btn.Name;
@@ -934,6 +944,10 @@ namespace Kolsites
             WelcomePanel.Visibility = Visibility.Visible;
             StatusText.Text = "";
             ClearCache();
+
+            // החזרת פריסת המקלדת לברירת המחדל הגלובלית - במידה והכפתור הקודם שינה אותה.
+            if (_settings.ShowVirtualKeyboard)
+                Keyboard.SetInitialLayout(_settings.DefaultKeyboardLayout);
         }
 
         private void KeyboardButton_Click(object sender, RoutedEventArgs e)

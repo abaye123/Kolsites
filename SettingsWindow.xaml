@@ -221,9 +221,10 @@
                             <TextBlock Text="פריסת מקלדת ברירת מחדל"
                                        Style="{ThemeResource BodyStrongTextBlockStyle}"/>
                             <ComboBox x:Name="KeyboardLayoutCombo" HorizontalAlignment="Stretch" MinWidth="240">
-                                <ComboBoxItem Tag="he"  Content="עברית"/>
-                                <ComboBoxItem Tag="en"  Content="אנגלית"/>
-                                <ComboBoxItem Tag="num" Content="מספרים"/>
+                                <ComboBoxItem Tag="he"     Content="עברית"/>
+                                <ComboBoxItem Tag="en"     Content="אנגלית"/>
+                                <ComboBoxItem Tag="num"    Content="מספרים (שורה)"/>
+                                <ComboBoxItem Tag="numpad" Content="מקשי טלפון (3x3)"/>
                             </ComboBox>
                         </StackPanel>
                         <StackPanel Spacing="4">

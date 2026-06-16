@@ -66,6 +66,13 @@ namespace Kolsites
         public bool RestrictToPath { get; set; } = false;
 
         /// <summary>
+        /// דריסה של פריסת המקלדת ברירת המחדל כשנכנסים לאתר הזה. ערך ריק (ברירת מחדל) =
+        /// משתמש ב-AppSettings.DefaultKeyboardLayout. ערכים אפשריים: "he", "en", "num", "numpad".
+        /// תקף רק כשהמקלדת הווירטואלית מופעלת.
+        /// </summary>
+        public string KeyboardLayout { get; set; } = "";
+
+        /// <summary>
         /// סקריפטים שירוצו על האתר (כמו TimerDirshu/TimerYak במקור) -
         /// מסירים אלמנטים מסויימים, מסתירים פרסומות, וכו'.
         /// רצים כל שנייה בזמן שהאתר טעון.
