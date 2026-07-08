@@ -1,0 +1,190 @@
+name: Build installer
+
+# Builds the Windows x64 installer end-to-end on a clean runner:
+#   1. The WinUI 3 app (Visual Studio MSBuild build)
+#   2. The Inno Setup installer (Installer/Kolsites.iss)
+#
+# Runs on version tags (v*) to attach the installer to a GitHub Release, and
+# can be triggered manually (workflow_dispatch) to test the build without tagging.
+#
+# The tag drives the version: v1.8.0 -> Kolsites-Setup-1.8.0.exe, which is exactly
+# what UpdateChecker.cs expects to find on the latest Release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create the Release on tag builds
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # On a tag push (v1.8.0) this exposes VERSION=1.8.0 to later steps, which
+      # then flows into the .NET assembly version and the Inno Setup AppVersion.
+      # On a manual run there's no tag, so VERSION stays empty and the versions
+      # already committed in the .csproj / Kolsites.iss are used as-is.
+      - name: Determine version from tag
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $ver = $env:GITHUB_REF_NAME -replace '^v',''
+            if ($ver -notmatch '^[0-9]+(\.[0-9]+){1,3}$') {
+              Write-Host "Tag '$($env:GITHUB_REF_NAME)' is not a version like v1.2.3 - aborting."
+              exit 1
+            }
+            Write-Host "Version from tag: $ver"
+          } else {
+            $ver = ''
+            Write-Host "Manual run (no tag) - keeping the versions already in the repo files."
+          }
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      # On tag builds, write the version into the source files that carry it
+      # literally. Encoding (UTF-8, with or without BOM) is preserved so the
+      # Hebrew text in these files is not corrupted. This stamps the version into
+      # THIS build only - it does not commit the changed files back to the repo.
+      - name: Stamp version into source files
+        if: env.VERSION != ''
+        shell: pwsh
+        run: |
+          $base = (Get-Location).Path
+          $ver  = $env:VERSION
+          # 4-part form for the Win32 manifest (e.g. 1.8.0 -> 1.8.0.0)
+          $p = $ver.Split('.'); while ($p.Count -lt 4) { $p += '0' }
+          $ver4 = ($p[0..3]) -join '.'
+
+          function Stamp($rel, $pattern, $replacement) {
+            $path  = Join-Path $base $rel
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            $bom   = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+            $text  = [System.IO.File]::ReadAllText($path)
+            $new   = [regex]::Replace($text, $pattern, $replacement)
+            if ($new -eq $text) { Write-Host "WARNING: no version match in $rel" }
+            [System.IO.File]::WriteAllText($path, $new, (New-Object System.Text.UTF8Encoding($bom)))
+            Write-Host "Stamped $rel"
+          }
+
+          # Current committed version - used to find the literal fallbacks in the C#.
+          $old = [regex]::Match(
+                   (Get-Content (Join-Path $base 'Kolsites.csproj') -Raw),
+                   '<Version>([^<]+)</Version>').Groups[1].Value
+
+          # 1) .csproj : <Version>1.7.0</Version> - this is what UpdateChecker
+          #    compares against the GitHub Release tag.
+          Stamp 'Kolsites.csproj' '<Version>[^<]*</Version>' "<Version>$ver</Version>"
+
+          # 2) app.manifest : <assemblyIdentity version="1.7.0.0" .../>
+          Stamp 'app.manifest' '(<assemblyIdentity\b[^>]*\bversion=")[^"]*(")' "`${1}$ver4`${2}"
+
+          # 3) The hard-coded fallbacks used only when the assembly version can't be
+          #    read: "גרסה 1.7.0" in SettingsWindow (x2) and var version = "1.7.0"
+          #    in KioskWindow. Anchored so it matches only the standalone old
+          #    version, never a substring of a longer number.
+          if ($old) {
+            $rx = "(?<![\d.])$([regex]::Escape($old))(?![\d.])"
+            Stamp 'SettingsWindow.xaml.cs' $rx $ver
+            Stamp 'KioskWindow.xaml.cs'    $rx $ver
+          } else {
+            Write-Host "Could not read <Version> from csproj; skipping the C# fallbacks."
+          }
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      # Build the WinUI 3 app the same way Visual Studio does locally: a plain
+      # Release build for x64 with NO RuntimeIdentifier, so the output lands
+      # directly in ...\net8.0-windows10.0.19041.0\ (where Kolsites.iss reads
+      # from). Passing -r win-x64 would nest it under a win-x64\ subfolder.
+      # Load the VS Developer environment first so WinAppSDK's XAML/PRI tasks
+      # actually run (a bare msbuild "succeeds" but silently skips them).
+      - name: Build app (x64)
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -property installationPath`) do set "VSPATH=%%i"
+          if not defined VSPATH ( echo [error] Visual Studio not found & exit /b 1 )
+          call "%VSPATH%\Common7\Tools\VsDevCmd.bat" -arch=x64 -no_logo
+          msbuild Kolsites.csproj -restore -t:Build -p:Configuration=Release -p:Platform=x64 -v:m
+
+      # MSBuild's output layout varies between runs: sometimes the app lands flat
+      # in ...\net8.0-windows10.0.19041.0\, sometimes nested one level down (e.g.
+      # under win-x64\, because the .csproj declares RuntimeIdentifiers). The
+      # installer reads it flat from ...\net8.0-windows10.0.19041.0\, so locate the
+      # exe wherever it is and make sure it ends up flat there.
+      #
+      # Only publish\ is dropped. runtimes\ and win-x64\ are kept on purpose - they
+      # carry native DLLs (WebView2Loader.dll exists in NEITHER the flat folder nor
+      # anywhere else), and a local build ships them, so the installer must too.
+      - name: Normalize build output for the installer
+        shell: pwsh
+        run: |
+          $root = "bin\x64\Release\net8.0-windows10.0.19041.0"
+          if (Test-Path (Join-Path $root "Kolsites.exe")) {
+            Write-Host "App already flat in $root"
+          } else {
+            # Find the exe anywhere under $root, ignoring any publish\ copy.
+            $exe = Get-ChildItem -Path $root -Recurse -Filter "Kolsites.exe" -File |
+                   Where-Object { $_.FullName -notmatch '\\publish\\' } |
+                   Select-Object -First 1
+            if (-not $exe) {
+              Write-Host "Kolsites.exe not found under $root. Actual bin tree:"
+              Get-ChildItem -Recurse bin | Select-Object -ExpandProperty FullName
+              exit 1
+            }
+            $from = $exe.Directory.FullName
+            Write-Host "Flattening $from -> $root"
+            Get-ChildItem -Force $from | Move-Item -Destination $root -Force
+            Remove-Item -Recurse -Force $from -ErrorAction SilentlyContinue
+          }
+          Remove-Item -Recurse -Force (Join-Path $root "publish") -ErrorAction SilentlyContinue
+          if (-not (Test-Path (Join-Path $root "Kolsites.exe"))) {
+            Write-Host "Normalize failed - exe missing from $root"; exit 1
+          }
+          Write-Host "OK: app ready in $root"
+
+      # ---------------------------------------------------------------------
+      #  CODE SIGNING slots in here once a certificate is available: sign the
+      #  built Kolsites.exe BEFORE the installer is built, then sign the
+      #  installer itself after the next step.
+      # ---------------------------------------------------------------------
+
+      - name: Build installer (Inno Setup)
+        shell: cmd
+        run: |
+          cd Installer
+          set "VERARG="
+          if not "%VERSION%"=="" set "VERARG=/DAppVersion=%VERSION%"
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" %VERARG% Kolsites.iss
+
+      # --- Sign the finished installer here once signing is set up. ---
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kolsites-Setup
+          path: Release\Kolsites-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = Get-ChildItem Release\Kolsites-Setup-*.exe | Select-Object -First 1
+          gh release create $env:GITHUB_REF_NAME $exe.FullName `
+            --title "Kolsites $env:GITHUB_REF_NAME" `
+            --notes "מתקין אוטומטי שנבנה מתגית זו." `
+            --draft

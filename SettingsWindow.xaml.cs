@@ -345,10 +345,7 @@ namespace Kolsites
                 UpdateStatusText.Text = "מפעיל את ההתקנה...";
                 UpdateChecker.RunInstaller(installerPath, SilentUpdateToggle.IsOn);
 
-                // יוצאים מהתוכנה - המתקין צריך להיות חופשי להחליף את הקבצים.
-                // ה-Watchdog לא ירים אותנו מחדש: המתקין יעצור אותו וירים בסיום (Inno Setup
-                // משתמש ב-Restart Manager). אם זה לא מצליח - המשתמש יפעיל מחדש בעצמו.
-                Application.Current.Exit();
+                ShutdownForUpdate();
             }
             catch (Exception ex)
             {
@@ -356,6 +353,25 @@ namespace Kolsites
                 UpdateProgressBar.Visibility = Visibility.Collapsed;
                 CheckUpdatesButton.IsEnabled = true;
                 InstallUpdateButton.IsEnabled = true;
+            }
+        }
+
+        // המתקין שזה עתה הופעל ממתין לשחרור ה-Mutex של חלון ההגדרות (ושל הקיוסק) לפני
+        // שהוא מחליף קבצים ב-{app}. סגירה "מסודרת" של WinUI (Application.Exit) מריצה
+        // Finalizers על ה-UI thread ועלולה להיתקע או להתמשך מעבר לזמן ההמתנה של המתקין -
+        // הקבצים נשארים נעולים, ההעתקה נכשלת, ועם /NORESTART העדכון נדחה בשקט לאתחול הבא.
+        // Process.Kill מפיל את התהליך מיד ומחזיר למערכת כל handle, כולל ה-Mutex.
+        // את תהליך הקיוסק (שנעול על אותו EXE) הורג המתקין עצמו ב-PrepareToInstall.
+        private static void ShutdownForUpdate()
+        {
+            try
+            {
+                Process.GetCurrentProcess().Kill();
+            }
+            catch
+            {
+                // בלתי סביר; נסיגה לנתיב היציאה המנוהל.
+                try { Application.Current.Exit(); } catch { }
             }
         }
 

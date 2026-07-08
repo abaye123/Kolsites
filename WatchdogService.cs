@@ -53,6 +53,10 @@ namespace Kolsites
         private const string LockMutexName = "Kolsites_Watchdog_Lock_{1A4F6B8D-2C3E-4D5F-6A7B-8C9D0E1F2A3B}";
         private const string KioskMutexName = "Kolsites_Kiosk_{8F3A2C7E-4B5D-4F1A-9C8E-3D2B1A5F6E7D}";
 
+        // מיוטקס גלובלי שמוחזק ע"י מתקין ה-Inno Setup כל עוד הוא רץ (SetupMutex ב-Kolsites.iss).
+        // גלובלי בכוונה: ה-Watchdog רץ כ-SYSTEM בסשן 0, והמתקין בסשן של המשתמש.
+        private const string SetupMutexName = @"Global\Kolsites_Setup_Mutex";
+
         // ערך "Kolsites" תחת מפתח Run - נוצר ע"י המתקין כשמסומן Tasks: autostart.
         private const string AutoStartRunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string AutoStartValueName = "Kolsites";
@@ -97,6 +101,15 @@ namespace Kolsites
 
         private static void EnsureKioskRunning()
         {
+            // בזמן התקנה/עדכון אסור להפעיל את Kolsites: המופע החדש ינעל את הקבצים
+            // ב-{app} בדיוק כשהמתקין מנסה להחליף אותם, והעדכון ייכשל בשקט.
+            // המתקין מפעיל אותנו מחדש בעצמו בסיום (סעיף [Run]).
+            if (IsInstallerRunning())
+            {
+                Log("דילוג: מתקין Kolsites פעיל (עדכון בתהליך).");
+                return;
+            }
+
             // הדרך האמינה ביותר לזהות שמופע ה-Kiosk רץ זה לבדוק אם ה-Mutex תפוס.
             // אם אנחנו מצליחים להחזיק בו - זה אומר שאין Kiosk רץ.
             bool kioskRunning;
@@ -130,6 +143,24 @@ namespace Kolsites
             }
 
             LaunchKiosk();
+        }
+
+        private static bool IsInstallerRunning()
+        {
+            try
+            {
+                if (Mutex.TryOpenExisting(SetupMutexName, out var m))
+                {
+                    m.Dispose();
+                    return true;
+                }
+            }
+            catch
+            {
+                // חוסר הרשאה לפתוח את ה-Mutex פירושו שהוא קיים - כלומר המתקין רץ.
+                return true;
+            }
+            return false;
         }
 
         private static bool IsAutoStartEnabled()
